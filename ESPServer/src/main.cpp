@@ -25,14 +25,7 @@ void setup()
   delay(2000);
   Serial.println("info: starting...");
 
-  pid_state_mutex = xSemaphoreCreateMutex();
-  pid_state.proportional = 0;
-  pid_state.integral = 0;
-  pid_state.derivative = 0;
-
-  kinematic_state_mutex = xSemaphoreCreateMutex();
-  kinematic_state.linear_velocity_target = 40;
-  kinematic_state.angular_velocity_target = 0;
+  instantiate_shared();
 
   Serial.println("info: instantiated mutexes");
 

@@ -7,19 +7,18 @@ struct OperationRequest
 {
   bool is_valid;
   uint8_t operation_code;
-  uint8_t* payload;
+  uint8_t *payload;
   uint16_t payload_length;
-  WiFiClient* client;
+  WiFiClient *client;
 };
 
 /// @brief handles websocket connections and messages
 class WebsocketServer
 {
 public:
-
   /// @brief opens ESP as access point and begins WiFiServer
-  /// @param s is a pointer to to the server 
-  void begin(WiFiServer* s)
+  /// @param s is a pointer to to the server
+  void begin(WiFiServer *s)
   {
     this->server = s;
     WiFi.mode(WIFI_AP);
@@ -46,7 +45,8 @@ public:
         Serial.println("\ninfo: accepting new client");
         return client;
       }
-      else {
+      else
+      {
         Serial.print(".");
         delay(1000);
       }
@@ -72,21 +72,24 @@ public:
     while (1)
     {
 
-      if (millis() - start_time > 5000){
-        
-        if (read == 0){
-        Serial.println("error: connection timed out");
-        client->stop();
-        return OperationRequest{false, 0, NULL, 0, NULL};
+      if (millis() - start_time > 5000)
+      {
+
+        if (read == 0)
+        {
+          Serial.println("error: connection timed out");
+          client->stop();
+          return OperationRequest{false, 0, NULL, 0, NULL};
         }
-        else {
-          if (!client->connected()){
+        else
+        {
+          if (!client->connected())
+          {
             Serial.println("error: client lost connection");
             return OperationRequest{false, 0, NULL, 0, NULL};
           }
         }
       }
-
 
       if (client->available())
       {
@@ -140,7 +143,8 @@ public:
         }
         read++;
       }
-      else {
+      else
+      {
         delay(1);
       }
 
@@ -162,28 +166,31 @@ public:
     return OperationRequest{false, 0, NULL, 0, NULL};
   }
 
-  void echo(OperationRequest* operation){
+  void echo(OperationRequest *operation)
+  {
 
-    if (operation->payload == NULL) {
+    if (operation->payload == NULL)
+    {
       Serial.println("error: cannot echo NULL payload; memory error");
     }
-    else {
-      for (uint16_t i = 0; i < operation->payload_length; i++){
+    else
+    {
+      for (uint16_t i = 0; i < operation->payload_length; i++)
+      {
         operation->client->write(*(operation->payload + i));
       }
     }
     Serial.println("info: echoed payload");
-
   }
-  public:
-    WiFiServer* server;
-};
 
+public:
+  WiFiServer *server;
+};
 
 void handle_message(OperationRequest *operation);
 void handle_var_update(OperationRequest *operation);
 bool handle_var_update_inner(uint8_t target, uint16_t value);
-void websocket_loop(void* _);
+void websocket_loop(void *_);
 
 /// @brief relays general message from websocket to serial
 /// @param operation is a pointer to the operation to handle
@@ -329,7 +336,7 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
 
 /// @brief monitors and handles websocket communication
 /// @param _ unused
-void websocket_loop(void* _)
+void websocket_loop(void *_)
 {
 
   Serial.println("info: starting server...");
