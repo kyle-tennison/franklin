@@ -1,8 +1,8 @@
 # franklin
+A balancing robot
 
 ![](./cad-screenshot.png)
 
-A balancing robot
 
 ## Background
 
