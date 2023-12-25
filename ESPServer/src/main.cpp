@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <WiFi.h>
 
 #include <WebsocketServer.h>
 #include <MotorDrive.h>
@@ -32,7 +31,7 @@ void setup()
   xTaskCreatePinnedToCore(
       websocket_loop,
       "Websocket Loop",
-      2048,
+      4096,
       NULL,
       10,
       NULL,

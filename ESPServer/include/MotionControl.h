@@ -88,9 +88,69 @@ Angles angle_from_accel(float accel_x, float accel_y, float accel_z)
     float theta_y = atan2(accel_x, accel_z) * RAD_TO_DEG;
     float theta_x = atan2(accel_y, accel_z) * RAD_TO_DEG;
 
+    // calibrate
+    theta_y -= 90;
+    theta_y *= -1;
+
+    theta_x += 90;
+    theta_y += 90;
+
+    if (theta_y < 0){
+        theta_y += 360;
+    }
+    if (theta_y > 360){
+        theta_y -= 360;
+    }
+    if (theta_x < 0){
+        theta_x += 360;
+    }
+    if (theta_x > 360){
+        theta_x -= 360;
+    }
+
+    theta_x -= 90;
+    theta_y -= 90;
+
     return Angles{
         theta_x,
         theta_y};
+}
+
+Angles angle_from_integral(float omega_x, float omega_y, float omega_z){
+    
+    float delta_time = (micros() - gyro_record.timestamp) / 1E6;
+    float delta_theta_x = omega_x * delta_time;
+    float delta_theta_y = omega_y * delta_time;
+
+    gyro_record.theta_x += delta_theta_x;
+    gyro_record.theta_y += delta_theta_y;
+    gyro_record.timestamp = micros();
+
+    gyro_record.theta_x += 90;
+    gyro_record.theta_y += 90;
+
+    if (gyro_record.theta_x < 0){
+        gyro_record.theta_x += 360;
+    }
+    else if (gyro_record.theta_x > 360){
+        gyro_record.theta_x -= 360;
+    }
+    if (gyro_record.theta_y < 0){
+        gyro_record.theta_y += 360;
+    }
+    else if (gyro_record.theta_y > 360){
+        gyro_record.theta_y -= 360;
+    }
+
+    gyro_record.theta_x -= 90;
+    gyro_record.theta_y -= 90;
+
+    return Angles{
+        gyro_record.theta_x,
+        gyro_record.theta_y
+    };
+
+
 }
 
 Angles poll_gyro()
@@ -125,10 +185,15 @@ Angles poll_gyro()
 
     // convert from LSB to °/sec
     float omega_x = (float)omega_x_raw / 65.5;
-    float omega_y = (float)omega_x_raw / 65.5;
-    float omega_z = (float)omega_x_raw / 65.5;
+    float omega_y = (float)omega_y_raw / 65.5;
+    float omega_z = (float)omega_z_raw / 65.5;
 
     Angles accel_angle = angle_from_accel(accel_x, accel_y, accel_z);
+    Angles integral_angle = angle_from_integral(omega_x, omega_y, omega_z);
+
+    Serial.print(accel_angle.theta_y);
+    Serial.print(", ");
+    Serial.println(integral_angle.theta_y);
 
     // kalman filter to combine accelerometer and gyroscope data
     float theta_x = ALPHA * (accel_angle.theta_x + omega_x) + (1 - ALPHA) * accel_angle.theta_x;
@@ -146,6 +211,7 @@ void telemetry_loop(void *_)
 
     // let websocket start first
     delay(5000);
+    Serial.println("info: starting telemetry loop");
 
     setup_gyro();
 
