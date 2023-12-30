@@ -10,8 +10,6 @@ should be executed in core 0, then referenced here via mutex.
 
 #include <shared_variables.h>
 #include <constants.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
 #include <Wire.h>
 
 uint32_t last_loop_millis = 0;

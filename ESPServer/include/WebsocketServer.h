@@ -47,7 +47,7 @@ public:
       }
       else
       {
-        Serial.print(".");
+        // Serial.print(".");
         delay(1000);
       }
     }
@@ -339,11 +339,13 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
 void websocket_loop(void *_)
 {
 
+  Serial.println("debug: opened websocket handler");
+  delay(1000);
   Serial.println("info: starting server...");
   WiFiServer server(SERVER_PORT);
-  Serial.println("info: instantiated server");
   WebsocketServer sock;
   sock.begin(&server);
+  Serial.println("info: instantiated server");
 
   WiFiClient client = sock.accept();
 

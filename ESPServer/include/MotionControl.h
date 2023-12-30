@@ -8,10 +8,8 @@ Runs in core zero along with WebsocketServer.
 */
 
 #include <Arduino.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Wire.h>
 #include <shared_variables.h>
+#include <Wire.h>
 
 #define MPU_I2C_ADDR 0x68
 #define I2C_CLOCK_SPEED 400000
@@ -20,8 +18,10 @@ Runs in core zero along with WebsocketServer.
 #define ROT_VARIANCE_ACCEL 3
 
 #define ALPHA 0.125
-
 #define GYRO_POLL_DELAY 100
+
+#define KYLE_CONSTANT 0.8
+
 struct GyroState
 {
     float theta_x;
@@ -30,10 +30,9 @@ struct GyroState
 
 struct GyroRecord
 {
-    float theta_x;
+    float omega_y;
     float theta_y;
     uint32_t timestamp;
-    float uncertainty;
 };
 
 struct Angles
@@ -43,15 +42,14 @@ struct Angles
 };
 
 GyroRecord gyro_record;
+float last_theta_y = 0;
 
 void setup_gyro()
 {
 
     // give gyro_record starting values
-    gyro_record.theta_x = 0;
-    gyro_record.theta_y = 0;
+    gyro_record.omega_y = 0;
     gyro_record.timestamp = micros();
-    gyro_record.uncertainty = 0;
 
     Wire.setClock(I2C_CLOCK_SPEED);
     Wire.begin();
@@ -87,6 +85,29 @@ Angles angle_from_accel(float accel_x, float accel_y, float accel_z)
 
     float theta_y = atan2(accel_x, accel_z) * RAD_TO_DEG;
     float theta_x = atan2(accel_y, accel_z) * RAD_TO_DEG;
+
+    // calibrate
+    theta_y -= 90;
+    theta_y *= -1;
+
+    theta_x += 90;
+    theta_y += 90;
+
+    if (theta_y < 0){
+        theta_y += 360;
+    }
+    if (theta_y > 360){
+        theta_y -= 360;
+    }
+    if (theta_x < 0){
+        theta_x += 360;
+    }
+    if (theta_x > 360){
+        theta_x -= 360;
+    }
+
+    theta_x -= 90;
+    theta_y -= 90;
 
     return Angles{
         theta_x,
@@ -125,18 +146,28 @@ Angles poll_gyro()
 
     // convert from LSB to °/sec
     float omega_x = (float)omega_x_raw / 65.5;
-    float omega_y = (float)omega_x_raw / 65.5;
-    float omega_z = (float)omega_x_raw / 65.5;
+    float omega_y = (float)omega_y_raw / 65.5;
+    float omega_z = (float)omega_z_raw / 65.5;
 
     Angles accel_angle = angle_from_accel(accel_x, accel_y, accel_z);
 
-    // kalman filter to combine accelerometer and gyroscope data
-    float theta_x = ALPHA * (accel_angle.theta_x + omega_x) + (1 - ALPHA) * accel_angle.theta_x;
-    float theta_y = ALPHA * (accel_angle.theta_y + omega_y) + (1 - ALPHA) * accel_angle.theta_x;
+    // Predict angle
+    float delta_time = (micros() - gyro_record.timestamp)/1E6;
+
+    float angular_accel_y = (omega_y - gyro_record.omega_y) / delta_time;
+
+    float ddyn_predict_y = gyro_record.theta_y + omega_y * delta_time + 0.5 * angular_accel_y * pow(delta_time, 2);
+
+    float theta_y_predict = ((1 - KYLE_CONSTANT) * accel_angle.theta_y) + KYLE_CONSTANT * ddyn_predict_y;
+
+    gyro_record.omega_y = omega_y;
+    gyro_record.theta_y = theta_y_predict;
+    gyro_record.timestamp = micros();
+
 
     return Angles{
-        theta_x,
-        theta_y};
+        0,
+        theta_y_predict};
 }
 
 /// @brief interprets sensor inputs and pre-processes for MotorDrive.h
@@ -146,6 +177,7 @@ void telemetry_loop(void *_)
 
     // let websocket start first
     delay(5000);
+    Serial.println("info: starting telemetry loop");
 
     setup_gyro();
 
