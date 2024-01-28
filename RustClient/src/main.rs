@@ -1,13 +1,19 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-
 use std::{
-    collections::{HashMap, VecDeque}, io::{self, Read, Write}, net::TcpStream, thread, time::{Duration, Instant}
+    collections::{HashMap, VecDeque},
+    io::{self, Read, Write},
+    net::TcpStream,
+    thread::{self, sleep},
+    time::{Duration, Instant},
 };
+
+use term_size::dimensions;
 
 const ESP_ADDR: &str = "192.168.4.1:80";
 const HEADER_BYTE: u8 = 0x46;
+const GYRO_GRAPH_LIM: u8 = 45;
 
 #[derive(Clone)]
 enum Operation {
@@ -107,16 +113,15 @@ impl WebsocketClient {
         elapsed
     }
 
-
     /// requests general status info
-    fn poll_status(&mut self) {
+    fn poll_status(&mut self, show: bool) -> HashMap<String, f32> {
         let mut header = self.get_header(Operation::StatusRequest, 1);
 
         header.push(1); // add a random byte so we don't have an empty packet
 
         match self.socket.write(&header) {
             Ok(_) => (),
-            Err(err) => panic!("error: failed to send status request: {err}")
+            Err(err) => panic!("error: failed to send status request: {err}"),
         }
 
         let mut status_response: VecDeque<u8> = VecDeque::new();
@@ -130,50 +135,41 @@ impl WebsocketClient {
             match self.socket.read(&mut recv_buf) {
                 Ok(1) => (),
                 Ok(n) => {
-                    print!("error: read {n} bytes while intending to read one");
-                    return
+                    panic!("error: read {n} bytes while intending to read one");
                 }
                 Err(err) => {
-                    print!("error: failed to read from status response: {err}");
-                    return
+                    panic!("error: failed to read from status response: {err}");
                 }
             }
 
             let recv = recv_buf[0];
+
+            // println!("recv: {recv}");
 
             if byte_index <= 1 {
                 if recv != HEADER_BYTE {
                     println!("error: byte {recv} is not a header byte");
                     continue;
                 }
-            }
-
-            else if byte_index == 2  {
+            } else if byte_index == 2 {
                 // ignore the operation byte
-            }
-
-            else if byte_index == 3 {
+            } else if byte_index == 3 {
                 content_len = recv.into()
-
-            }
-            else if byte_index > 3 {
-
+            } else if byte_index > 3 {
                 if !content_len_determined {
                     content_len += usize::from(recv);
 
                     if recv == 0 {
                         content_len_determined = true;
                     }
-                }
-                else {
+                } else {
                     status_response.push_back(recv);
 
                     if status_response.len() == content_len {
-                        println!("debug: done collecting status");
-                        break
+                        // println!("debug: done collecting status");
+                        break;
                     }
                 }
-
             }
 
             byte_index += 1;
@@ -181,47 +177,58 @@ impl WebsocketClient {
 
         let map = self.deserialize_status(&mut status_response);
 
-        println!("Status response: {{");
-        for k in map.keys(){
-            let v = map.get(k).unwrap();
-            
-            println!("\t{k} : {v},");
+        if show {
+            println!("Status response: {{");
+            let mut sorted_pairs: Vec<_> = map.iter().collect();
+            sorted_pairs.sort_by(|a, b| a.0.cmp(b.0));
+            for (key, value) in sorted_pairs {
+                println!("\t{}: {}", key, value);
+            }
+            println!("}}");
         }
-        println!("}}");
 
-
+        map
     }
 
     /// Deserializes the status response from ESP into a hash map
-    fn deserialize_status(&self, status_response: &mut VecDeque<u8>) -> HashMap<String, usize>{
+    fn deserialize_status(&self, status_response: &mut VecDeque<u8>) -> HashMap<String, f32> {
+        let mut map: HashMap<String, f32> = HashMap::new();
 
-        let mut map: HashMap<String, usize> = HashMap::new();
-
-        assert!(*status_response.back().unwrap() == 0, "status response must end in zero");
+        assert!(
+            *status_response.back().unwrap() == 0,
+            "status response must end in zero"
+        );
 
         while !status_response.is_empty() {
             let key = status_response.pop_front().unwrap();
-            let mut value: usize = status_response.pop_front().unwrap().into();
-            let mut next = status_response.pop_front().unwrap();
+            let b0 = status_response.pop_front().unwrap();
+            let b1 = status_response.pop_front().unwrap();
+            let end = status_response.pop_front().unwrap();
 
-            while next != 0{
-                value += usize::from(next);
-                next = status_response.pop_front().unwrap();
-            }
+            assert_eq!(end, 0, "end must be zero");
+
+            let value_raw = (((b0 as u16) << 8) + b1 as u16) as i16;
+            let mut value = f32::from(value_raw);
 
             let identifier = match key {
                 0 => "PID Proportional",
                 1 => "PID Integral",
                 2 => "PID Derivative",
-                3 => "Motors enabled",
-                _ => panic!("failed to deserialize status response: unknown key")
-            }.to_string();
+                3 => "Motors Enabled",
+                4 => "Gyro Offset",
+                5 => "Gyro Value",
+                _ => panic!("failed to deserialize status response: unknown key"),
+            }
+            .to_string();
+
+            // fix caveats
+            if identifier == "Gyro Value" {
+                value /= 100.;
+            }
 
             map.insert(identifier, value);
-
         }
         map
-
     }
 
     /// sends a variable update
@@ -245,7 +252,6 @@ impl WebsocketClient {
 fn main() {
     let mut sock = WebsocketClient::new(ESP_ADDR);
 
-
     thread::sleep(Duration::from_millis(1000));
     println!("info: connected to socket");
 
@@ -256,32 +262,31 @@ fn main() {
         thread::sleep(Duration::from_millis(1000));
     }
 
-    sock.poll_status();
+    sock.poll_status(true);
 
     // Setup default values
     sock.send_update(VariableUpdateTarget::PidProportional, 29);
     sock.send_update(VariableUpdateTarget::PidIntegral, 81);
     sock.send_update(VariableUpdateTarget::PidDerivative, 11);
     sock.send_update(VariableUpdateTarget::GyroOffset, 148);
+    sock.send_update(VariableUpdateTarget::MotorEnabled, 1);
 
     loop {
         print!(">>> ");
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input)
+        io::stdin()
+            .read_line(&mut input)
             .expect("Failed to read line");
 
         let command_raw: &str = input.trim();
 
         let command: Vec<&str> = command_raw.split(' ').collect();
 
-
-
         match command[0] {
             "pid" => {
-
-                if command.len() != 3{
+                if command.len() != 3 {
                     println!("error: missing arguments");
                     continue;
                 }
@@ -292,23 +297,22 @@ fn main() {
                     "i" => VariableUpdateTarget::PidIntegral,
                     _ => {
                         println!("error: invalid pid target '{}'", command[1]);
-                        continue
+                        continue;
                     }
                 };
-
 
                 let value = match command[2].to_string().parse::<usize>() {
                     Ok(val) => val,
                     Err(err) => {
                         println!("error: illegal value {}", command[2]);
-                        continue
+                        continue;
                     }
                 };
 
                 sock.send_update(target, value);
-            },
+            }
             "mot" => {
-                if command.len() != 2{
+                if command.len() != 2 {
                     println!("error: missing arguments");
                     continue;
                 }
@@ -318,14 +322,14 @@ fn main() {
                     "off" => 0,
                     _ => {
                         println!("error: invalid argument. expected enable/disable");
-                        continue
+                        continue;
                     }
                 };
 
                 sock.send_update(VariableUpdateTarget::MotorEnabled, value);
-            },
+            }
             "gyro" => {
-                if command.len() != 2{
+                if command.len() != 2 {
                     println!("error: missing arguments");
                     continue;
                 }
@@ -334,28 +338,80 @@ fn main() {
                     Ok(val) => val,
                     Err(err) => {
                         println!("error: illegal value {}", command[2]);
-                        continue
+                        continue;
                     }
                 };
 
                 let value = (value_float.round() as i32 * 10 + 128) as usize;
 
                 sock.send_update(VariableUpdateTarget::GyroOffset, value)
-
-
             }
-            "ping" => {sock.send_ping();},
-            "poll" => {sock.poll_status();},
-            "exit" => {std::process::exit(0)},
-            "" => {},
-            _ => println!("error: unknown command")
+            "graph" => {
+                if command.len() != 2 {
+                    println!("error: missing arguments");
+                    continue;
+                }
+
+                let (width, _height) = match dimensions() {
+                    Some((w, h)) => (w, h),
+                    None => panic!("unable to determine console width"),
+                };
+
+                let start = Instant::now();
+
+                let duration = match command[1].to_string().parse::<u64>() {
+                    Ok(val) => val,
+                    Err(err) => {
+                        println!("error: illegal value {}", command[2]);
+                        continue;
+                    }
+                };
+
+                while (Instant::now() - start).as_secs() < duration {
+                    let map = sock.poll_status(false);
+                    sleep(Duration::from_millis(10));
+
+                    let gyro_value = map.get("Gyro Value").unwrap();
+
+                    let mut scale = gyro_value / GYRO_GRAPH_LIM as f32;
+                    if scale.abs() > 1. {
+                        scale = scale / scale.abs();
+                    }
+
+                    let delta_cells = ((width as f32 / 2.) * scale).floor() as i16;
+                    let total_cells = ((width as f32 / 2.).floor() as i16 + delta_cells) as usize;
+
+                    let mut output: Vec<char> = Vec::with_capacity(width);
+
+                    for _ in 0..total_cells {
+                        output.push('█');
+                    }
+
+                    let leftover = width - output.len();
+
+                    for _ in 0..leftover {
+                        output.push(' ')
+                    }
+
+                    output[width / 2] = '|';
+
+                    let final_str: String = output.into_iter().collect();
+                    println!("{}", final_str);
+                }
+            }
+            "ping" => {
+                sock.send_ping();
+            }
+            "poll" => {
+                sock.poll_status(true);
+            }
+            "exit" => std::process::exit(0),
+            "" => {}
+            _ => println!("error: unknown command"),
         }
     }
-
 
     // sock.send_update(VariableUpdateTarget::PidProportional, 1);
     // sock.send_update(VariableUpdateTarget::PidDerivative, 100);
     // sock.send_update(VariableUpdateTarget::PidIntegral, 20000);
-
-
 }
