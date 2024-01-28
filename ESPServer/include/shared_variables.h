@@ -13,12 +13,14 @@ struct KinematicState
 {
   int16_t linear_velocity_target;
   int16_t angular_velocity_target;
+  bool motors_enabled;
+  uint8_t gyro_offset;
 };
 
 struct MotorTarget
 {
-  int16_t mot_1_omega;
-  int16_t mot_2_omega;
+  double mot_1_omega;
+  double mot_2_omega;
 };
 
 PidState pid_state;
@@ -33,9 +35,9 @@ SemaphoreHandle_t motor_target_mutex = NULL;
 void instantiate_shared()
 {
   pid_state_mutex = xSemaphoreCreateMutex();
-  pid_state.proportional = 0;
-  pid_state.integral = 0;
-  pid_state.derivative = 0;
+  pid_state.proportional = 1;
+  pid_state.integral = 1;
+  pid_state.derivative = 1;
 
   kinematic_state_mutex = xSemaphoreCreateMutex();
   kinematic_state.linear_velocity_target = 40;

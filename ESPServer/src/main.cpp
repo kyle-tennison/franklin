@@ -19,6 +19,8 @@ void setup()
   pinMode(AUX_POWER_1, OUTPUT);
   pinMode(STEP_PIN_1, OUTPUT);
   pinMode(DIR_PIN_1, OUTPUT);
+  pinMode(STEP_PIN_2, OUTPUT);
+  pinMode(DIR_PIN_2, OUTPUT);
   digitalWrite(AUX_POWER_1, HIGH);
 
   delay(2000);

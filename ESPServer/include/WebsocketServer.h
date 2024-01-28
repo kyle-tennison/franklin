@@ -47,7 +47,7 @@ public:
       }
       else
       {
-        // Serial.print(".");
+        Serial.print(".");
         delay(1000);
       }
     }
@@ -72,32 +72,28 @@ public:
     while (1)
     {
 
-      if (millis() - start_time > 5000)
-      {
+      // if (millis() - start_time > 5000)
+      // {
 
-        if (read == 0)
-        {
-          Serial.println("error: connection timed out");
-          client->stop();
-          return OperationRequest{false, 0, NULL, 0, NULL};
-        }
-        else
-        {
+      //   if (read == 0)
+      //   {
+      //     Serial.println("error: connection timed out");
+      //     client->stop();
+      //     return OperationRequest{false, 0, NULL, 0, NULL};
+      //   }
+      //   else
+      //   {
           if (!client->connected())
           {
             Serial.println("error: client lost connection");
             return OperationRequest{false, 0, NULL, 0, NULL};
           }
-        }
-      }
+      //   }
+      // }
 
       if (client->available())
       {
         uint8_t recv = client->read();
-        // Serial.print("recv: ");
-        // Serial.print(recv);
-        // Serial.print(" @ ");
-        // Serial.print(read);
 
         if (read < 2 && recv != HEADER_BYTE)
         {
@@ -166,6 +162,9 @@ public:
     return OperationRequest{false, 0, NULL, 0, NULL};
   }
 
+
+  /// @brief echos bytes from the client 
+  /// @param operation the operation to respond to
   void echo(OperationRequest *operation)
   {
 
@@ -182,6 +181,56 @@ public:
     }
     Serial.println("info: echoed payload");
   }
+
+  void status_poll(OperationRequest *operation) {
+
+    PidState pid_state_copy;
+    KinematicState kinematic_state_copy;
+
+    if (xSemaphoreTake(pid_state_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
+    {
+      pid_state_copy.proportional = pid_state.proportional;
+      pid_state_copy.integral = pid_state.integral;
+      pid_state_copy.derivative = pid_state.derivative;
+      xSemaphoreGive(pid_state_mutex);
+    }
+    else {
+      Serial.println("error: failed to acquire PID mutex for status poll");
+      return;
+    }
+
+    if (xSemaphoreTake(kinematic_state_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
+    {
+      kinematic_state_copy.motors_enabled = kinematic_state.motors_enabled;
+      kinematic_state_copy.gyro_offset = kinematic_state.gyro_offset;
+      xSemaphoreGive(kinematic_state_mutex);
+    }
+    else {
+      Serial.println("error: failed to acquire PID mutex for status poll");
+      return;
+    }
+
+    // TODO: expand this to allow multiple bytes for big values
+    uint8_t status[] = {
+      0, pid_state_copy.proportional, 0, // PID Proportional
+      1, pid_state_copy.integral, 0, // PID Integral
+      2, pid_state_copy.derivative, 0, // PID Derivative
+      3, kinematic_state_copy.motors_enabled, 0, // Motors enabled
+      4, kinematic_state_copy.gyro_offset, 0 // Gyro offset
+    };
+
+
+    uint8_t header[] = {70, 70, 0, sizeof(status), 0};
+
+    for (uint8_t i = 0; i < sizeof(header); i++){
+      operation->client->write(header[i]);
+    }
+    for (uint8_t i = 0; i < sizeof(status); i++){
+      operation->client->write(status[i]);
+    }
+
+  }
+
 
 public:
   WiFiServer *server;
@@ -323,6 +372,16 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
     Serial.println(value);
     kinematic_state.angular_velocity_target = value;
     break;
+  case 5:
+    Serial.print("info: updating motor enabled state to ");
+    Serial.println((value == 1));
+    kinematic_state.motors_enabled = (value == 1);
+    break;
+  case 6:
+    Serial.print("info: updating gyro offset to ");
+    Serial.println((double)(value - 128)/10);
+    kinematic_state.gyro_offset = value;
+    break;
   default:
     Serial.print("error: received unknown target ");
     Serial.println(target);
@@ -381,6 +440,10 @@ void websocket_loop(void *_)
     case 2:
       Serial.println("debug: dispatching to echo");
       sock.echo(&request);
+      break;
+    case 3:
+      Serial.println("debug: dispatching to status poll");
+      sock.status_poll(&request);
       break;
     default:
       Serial.print("error: unknown operation ");

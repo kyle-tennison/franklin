@@ -12,11 +12,10 @@ should be executed in core 0, then referenced here via mutex.
 #include <constants.h>
 #include <Wire.h>
 
-uint32_t last_loop_millis = 0;
+uint32_t last_loop_micros = 0;
 
 uint32_t last_step_s1 = 0;
 uint32_t last_step_s2 = 0;
-
 int32_t current_wait_1 = 500;
 int32_t current_wait_2 = 500;
 
@@ -43,8 +42,8 @@ void stepper_loop(void *_)
     {
         // measure loop time
         long int now = micros();
-        int delta = now - last_loop_millis;
-        last_loop_millis = micros();
+        int delta = now - last_loop_micros;
+        last_loop_micros = now;
 
         if ((now - last_step_s1) > abs(current_wait_1) && current_wait_1 != UINT16_MAX)
         {
@@ -65,13 +64,13 @@ void stepper_loop(void *_)
         if ((now - last_step_s2) > abs(current_wait_2) && current_wait_2 != UINT16_MAX)
         {
 
-            if (current_wait_1 < 0)
+            if (current_wait_2 < 0)
             {
-                digitalWrite(DIR_PIN_1, HIGH);
+                digitalWrite(DIR_PIN_2, HIGH);
             }
             else
             {
-                digitalWrite(DIR_PIN_1, LOW);
+                digitalWrite(DIR_PIN_2, LOW);
             }
 
             digitalWrite(STEP_PIN_2, HIGH);
