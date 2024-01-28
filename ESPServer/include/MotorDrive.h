@@ -36,7 +36,7 @@ int32_t angular_vel_to_step_delay(float angular_velocity)
 /// @param _ unused
 void stepper_loop(void *_)
 {
-    Serial.println("info: starting stepper loop...");
+    debug_print("debug: starting stepper loop...");
     delay(5000);
     while (1)
     {

@@ -1,6 +1,7 @@
 #ifndef CONSTANTS
 #define CONSTANTS
 
+#define DEBUG
 #define SSID "franklin"
 #define PASSWORD "franklin44"
 #define SERVER_PORT 80

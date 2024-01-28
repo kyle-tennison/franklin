@@ -18,13 +18,15 @@ Runs in core zero along with WebsocketServer.
 #define ROT_VARIANCE_ACCEL 3
 
 #define ALPHA 0.125
-#define GYRO_POLL_DELAY 50
+#define GYRO_POLL_DELAY 25
 
 #define KYLE_CONSTANT 0.8
 
 #define PROPORTIONAL_SCALE 20 // ^-1
 #define INTEGRAL_SCALE 5
 #define DERIVATIVE_SCALE -20
+
+#define MAXIMUM_INTEGRAL 50
 
 /// @brief stores the previous state of the MPU
 struct GyroRecord
@@ -193,11 +195,11 @@ MotorTarget run_pid(double error, double delta_time)
         xSemaphoreGive(pid_state_mutex);
     }
 
-    if (integral > 100) {
-        integral = 100;
+    if (integral > MAXIMUM_INTEGRAL) {
+        integral = MAXIMUM_INTEGRAL;
     }
-    if (integral < -100) {
-        integral = -100;
+    else if (integral < -MAXIMUM_INTEGRAL) {
+        integral = -MAXIMUM_INTEGRAL;
     }
 
     double proportional = error;
@@ -237,6 +239,7 @@ bool check_enabled()
     return last_enabled;
 }
 
+// Updates the gyro offset
 double gyro_offset(){
    if (xSemaphoreTake(kinematic_state_mutex, 0) == 0)
     {
@@ -254,8 +257,8 @@ void telemetry_loop(void *_)
 {
 
     // let websocket start first
-    delay(5000);
-    Serial.println("info: starting telemetry loop");
+    delay(2000);
+    debug_print("debug: starting telemetry loop");
     last_poll = micros();
 
     setup_gyro();
@@ -287,9 +290,17 @@ void telemetry_loop(void *_)
         }
         else
         {
-            // Serial.println("warn [pwm]: kinematic state mutex busy");
             continue;
         }
+
+        if (xSemaphoreTake(gyro_value_mutex, pdMS_TO_TICKS(10)) == pdTRUE){
+            gyro_value = theta_y;
+            xSemaphoreGive(gyro_value_mutex);
+        }
+        else {
+            Serial.println("error: failed to acquire gyro mutex for update");
+        }
+
 
         delay(GYRO_POLL_DELAY);
     }

@@ -36,7 +36,7 @@ public:
   /// @return The WiFiClient of the incoming connection
   WiFiClient accept()
   {
-    Serial.println("debug: waiting for client...");
+    debug_print("debug: waiting for client...");
     while (1)
     {
       WiFiClient client = server->accept();
@@ -118,8 +118,8 @@ public:
             }
             else
             {
-              Serial.print("debug: determined content length to be ");
-              Serial.println(payload_length);
+              debug_print("debug: determined content length to be ");
+              debug_print(payload_length);
               payload_length_set = true;
               payload = (uint8_t *)malloc(payload_length);
             }
@@ -146,7 +146,7 @@ public:
 
       if (payload_index == payload_length && payload_length_set)
       {
-        Serial.println("info: received the following payload");
+        debug_print("debug: received the following payload");
         for (uint8_t i = 0; i < payload_length; i++)
         {
           Serial.print("  ");
@@ -186,12 +186,11 @@ public:
 
     PidState pid_state_copy;
     KinematicState kinematic_state_copy;
+    double gyro_value_copy;
 
     if (xSemaphoreTake(pid_state_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
     {
-      pid_state_copy.proportional = pid_state.proportional;
-      pid_state_copy.integral = pid_state.integral;
-      pid_state_copy.derivative = pid_state.derivative;
+      pid_state_copy = pid_state;
       xSemaphoreGive(pid_state_mutex);
     }
     else {
@@ -201,8 +200,7 @@ public:
 
     if (xSemaphoreTake(kinematic_state_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
     {
-      kinematic_state_copy.motors_enabled = kinematic_state.motors_enabled;
-      kinematic_state_copy.gyro_offset = kinematic_state.gyro_offset;
+      kinematic_state_copy = kinematic_state;
       xSemaphoreGive(kinematic_state_mutex);
     }
     else {
@@ -210,25 +208,55 @@ public:
       return;
     }
 
-    // TODO: expand this to allow multiple bytes for big values
-    uint8_t status[] = {
-      0, pid_state_copy.proportional, 0, // PID Proportional
-      1, pid_state_copy.integral, 0, // PID Integral
-      2, pid_state_copy.derivative, 0, // PID Derivative
-      3, kinematic_state_copy.motors_enabled, 0, // Motors enabled
-      4, kinematic_state_copy.gyro_offset, 0 // Gyro offset
+    if (xSemaphoreTake(gyro_value_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
+    {
+      gyro_value_copy = gyro_value;
+      xSemaphoreGive(gyro_value_mutex);
+    }
+    else {
+      Serial.println("error: failed to acquire gyro mutex for status poll");
+      return;
+    }
+
+    uint8_t i = 0;
+    uint16_t variables[] ={
+      pid_state_copy.proportional,
+      pid_state_copy.integral,
+      pid_state_copy.derivative,
+      ((kinematic_state_copy.motors_enabled) ? (uint8_t)1 : (uint8_t)0),
+      kinematic_state_copy.gyro_offset,
+      round(gyro_value_copy * 100),
     };
 
+    uint8_t max_packet_size = 4 * sizeof(variables) / 2;
 
-    uint8_t header[] = {70, 70, 0, sizeof(status), 0};
+    uint8_t* payload = (uint8_t*)malloc(max_packet_size);
 
+    uint8_t payload_index = 0;
+    for (uint8_t i = 0; i < sizeof(variables) / 2; i++){
+      uint16_t* var = &variables[i];
+
+      uint8_t b0 = (*var >> 8) & 0x00FF;
+      uint8_t b1 = (*var >> 0) & 0x00FF;
+
+      *(payload + payload_index) = i;
+      *(payload + payload_index + 1) = b0;
+      *(payload + payload_index + 2) = b1;
+      *(payload + payload_index + 3) = 0;
+      payload_index += 4;
+    };
+
+    // send header
+    uint8_t header [] = {70, 70, 0, payload_index, 0};
     for (uint8_t i = 0; i < sizeof(header); i++){
       operation->client->write(header[i]);
     }
-    for (uint8_t i = 0; i < sizeof(status); i++){
-      operation->client->write(status[i]);
+
+    for (uint8_t i = 0; i < payload_index; i++){
+      operation->client->write(*(payload + i));
     }
 
+    free(payload);
   }
 
 
@@ -318,7 +346,7 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
 {
 
   // lock corresponding mutex
-  Serial.print("debug: waiting for ");
+  debug_print("debug: waiting for ");
 
   SemaphoreHandle_t *mutex;
 
@@ -337,7 +365,7 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
 
   if (xSemaphoreTake(*mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
   {
-    Serial.println("debug: acquired mutex");
+    debug_print("debug: acquired mutex");
   }
   else
   {
@@ -388,7 +416,7 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
   }
 
   xSemaphoreGive(*mutex);
-  Serial.println("debug: returned mutex");
+  debug_print("debug: returned mutex");
 
   return true;
 }
@@ -398,13 +426,13 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
 void websocket_loop(void *_)
 {
 
-  Serial.println("debug: opened websocket handler");
+  debug_print("debug: opened websocket handler");
   delay(1000);
   Serial.println("info: starting server...");
   WiFiServer server(SERVER_PORT);
   WebsocketServer sock;
   sock.begin(&server);
-  Serial.println("info: instantiated server");
+  debug_print("debug: instantiated server");
 
   WiFiClient client = sock.accept();
 
@@ -430,19 +458,19 @@ void websocket_loop(void *_)
     switch (request.operation_code)
     {
     case 0:
-      Serial.println("debug: dispatching to message");
+      debug_print("debug: dispatching to message");
       handle_message(&request);
       break;
     case 1:
-      Serial.println("debug: dispatching to variable update");
+      debug_print("debug: dispatching to variable update");
       handle_var_update(&request);
       break;
     case 2:
-      Serial.println("debug: dispatching to echo");
+      debug_print("debug: dispatching to echo");
       sock.echo(&request);
       break;
     case 3:
-      Serial.println("debug: dispatching to status poll");
+      debug_print("debug: dispatching to status poll");
       sock.status_poll(&request);
       break;
     default:

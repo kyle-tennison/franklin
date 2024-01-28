@@ -1,11 +1,19 @@
 #include <Arduino.h>
 
+// #define DEBUG
+#ifdef DEBUG
+#define debug_print(message) Serial.println(message)
+#else
+#define debug_print(message)
+#endif
+
 #include <WebsocketServer.h>
 #include <MotorDrive.h>
 #include <constants.h>
 #include <common.h>
 #include <shared_variables.h>
 #include <MotionControl.h>
+
 
 void websocket_loop(void *_);
 void handle_var_update(OperationRequest *operation);
@@ -24,11 +32,11 @@ void setup()
   digitalWrite(AUX_POWER_1, HIGH);
 
   delay(2000);
-  Serial.println("info: starting...");
+  debug_print("debug: starting...");
 
   instantiate_shared();
 
-  Serial.println("info: instantiated mutexes");
+  debug_print("debug: instantiated mutexes");
 
   xTaskCreatePinnedToCore(
       websocket_loop,
@@ -39,7 +47,7 @@ void setup()
       NULL,
       0);
 
-  Serial.println("info: spawned websocket loop on core 0");
+  debug_print("debug: spawned websocket loop on core 0");
 
   xTaskCreatePinnedToCore(
       telemetry_loop,
@@ -49,7 +57,7 @@ void setup()
       5,
       NULL,
       0);
-  Serial.println("info: spawned telemetry loop on core 0");
+  debug_print("debug: spawned telemetry loop on core 0");
 
   xTaskCreatePinnedToCore(
       stepper_loop,
@@ -60,11 +68,11 @@ void setup()
       NULL,
       1);
 
-  Serial.println("info: spawned stepper loop on core 1");
+  debug_print("debug: spawned stepper loop on core 1");
 }
 
 void loop()
 {
-  Serial.println("info: killing default loop");
+  debug_print("debug: killing default loop");
   vTaskDelete(NULL);
 }

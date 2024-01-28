@@ -32,6 +32,9 @@ SemaphoreHandle_t kinematic_state_mutex = NULL;
 MotorTarget motor_target;
 SemaphoreHandle_t motor_target_mutex = NULL;
 
+double gyro_value;
+SemaphoreHandle_t gyro_value_mutex = NULL;
+
 void instantiate_shared()
 {
   pid_state_mutex = xSemaphoreCreateMutex();
@@ -46,6 +49,9 @@ void instantiate_shared()
   motor_target_mutex = xSemaphoreCreateMutex();
   motor_target.mot_1_omega = 0;
   motor_target.mot_2_omega = 0;
+
+  gyro_value_mutex = xSemaphoreCreateMutex();
+  gyro_value = 0;
 }
 
 #endif
