@@ -26,7 +26,7 @@ Runs in core zero along with WebsocketServer.
 #define INTEGRAL_SCALE 5
 #define DERIVATIVE_SCALE -20
 
-#define MAXIMUM_INTEGRAL 50
+#define MAXIMUM_INTEGRAL 10
 
 /// @brief stores the previous state of the MPU
 struct GyroRecord
@@ -195,12 +195,6 @@ MotorTarget run_pid(double error, double delta_time)
         xSemaphoreGive(pid_state_mutex);
     }
 
-    if (integral > MAXIMUM_INTEGRAL) {
-        integral = MAXIMUM_INTEGRAL;
-    }
-    else if (integral < -MAXIMUM_INTEGRAL) {
-        integral = -MAXIMUM_INTEGRAL;
-    }
 
     double proportional = error;
     integral += error / delta_time;
@@ -276,6 +270,10 @@ void telemetry_loop(void *_)
 
         MotorTarget new_target = run_pid(error, delta_time);
 
+        if (abs(integral) > MAXIMUM_INTEGRAL) {
+            integral = MAXIMUM_INTEGRAL * abs(integral) / integral;
+        }
+
         bool motors_enabled = check_enabled();
         if (!motors_enabled)
         {
@@ -293,9 +291,11 @@ void telemetry_loop(void *_)
             continue;
         }
 
-        if (xSemaphoreTake(gyro_value_mutex, pdMS_TO_TICKS(10)) == pdTRUE){
-            gyro_value = theta_y;
-            xSemaphoreGive(gyro_value_mutex);
+        if (xSemaphoreTake(motion_info_mutex, pdMS_TO_TICKS(10)) == pdTRUE){
+            motion_info.gyro_value = theta_y;
+            motion_info.integral_sum = integral;
+            motion_info.motor_target = new_target.mot_1_omega;
+            xSemaphoreGive(motion_info_mutex);
         }
         else {
             Serial.println("error: failed to acquire gyro mutex for update");

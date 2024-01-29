@@ -23,6 +23,12 @@ struct MotorTarget
   double mot_2_omega;
 };
 
+struct MotionInfo{
+  double gyro_value;
+  double motor_target;
+  double integral_sum;
+};
+
 PidState pid_state;
 SemaphoreHandle_t pid_state_mutex = NULL;
 
@@ -32,8 +38,8 @@ SemaphoreHandle_t kinematic_state_mutex = NULL;
 MotorTarget motor_target;
 SemaphoreHandle_t motor_target_mutex = NULL;
 
-double gyro_value;
-SemaphoreHandle_t gyro_value_mutex = NULL;
+MotionInfo motion_info;
+SemaphoreHandle_t motion_info_mutex = NULL;
 
 void instantiate_shared()
 {
@@ -50,8 +56,11 @@ void instantiate_shared()
   motor_target.mot_1_omega = 0;
   motor_target.mot_2_omega = 0;
 
-  gyro_value_mutex = xSemaphoreCreateMutex();
-  gyro_value = 0;
+  motion_info_mutex = xSemaphoreCreateMutex();
+  motion_info.gyro_value = 0;
+  motion_info.motor_target = 0;
+  motion_info.integral_sum = 0;
+
 }
 
 #endif

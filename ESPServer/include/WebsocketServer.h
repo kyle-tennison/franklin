@@ -146,12 +146,12 @@ public:
 
       if (payload_index == payload_length && payload_length_set)
       {
-        debug_print("debug: received the following payload");
-        for (uint8_t i = 0; i < payload_length; i++)
-        {
-          Serial.print("  ");
-          Serial.print(*(payload + i), HEX);
-        }
+        // debug_print("debug: received the following payload");
+        // for (uint8_t i = 0; i < payload_length; i++)
+        // {
+        //   Serial.print("  ");
+        //   Serial.print(*(payload + i), HEX);
+        // }
 
         return OperationRequest{true, operation, payload, payload_length, client};
       }
@@ -186,7 +186,7 @@ public:
 
     PidState pid_state_copy;
     KinematicState kinematic_state_copy;
-    double gyro_value_copy;
+    MotionInfo motion_info_copy;
 
     if (xSemaphoreTake(pid_state_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
     {
@@ -208,10 +208,10 @@ public:
       return;
     }
 
-    if (xSemaphoreTake(gyro_value_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
+    if (xSemaphoreTake(motion_info_mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
     {
-      gyro_value_copy = gyro_value;
-      xSemaphoreGive(gyro_value_mutex);
+      motion_info_copy = motion_info;
+      xSemaphoreGive(motion_info_mutex);
     }
     else {
       Serial.println("error: failed to acquire gyro mutex for status poll");
@@ -225,7 +225,9 @@ public:
       pid_state_copy.derivative,
       ((kinematic_state_copy.motors_enabled) ? (uint8_t)1 : (uint8_t)0),
       kinematic_state_copy.gyro_offset,
-      round(gyro_value_copy * 100),
+      motion_info_copy.gyro_value * 100,
+      motion_info_copy.integral_sum * 10,
+      motion_info_copy.motor_target * 100,
     };
 
     uint8_t max_packet_size = 4 * sizeof(variables) / 2;
@@ -353,15 +355,15 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
   if (target <= 3)
   {
     mutex = &pid_state_mutex;
-    Serial.print("PID Mutex");
+    debug_print("PID Mutex");
   }
   else
   {
     mutex = &kinematic_state_mutex;
-    Serial.print("Kinematic Mutex");
+    debug_print("Kinematic Mutex");
   }
 
-  Serial.println("...");
+  debug_print("...");
 
   if (xSemaphoreTake(*mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
   {
