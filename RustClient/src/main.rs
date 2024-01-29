@@ -13,6 +13,7 @@ use std::{
 use term_size::dimensions;
 
 const ESP_ADDR: &str = "192.168.4.1:80";
+const PYTHON_ADDR: &str = "localhost:2999";
 const HEADER_BYTE: u8 = 0x46;
 const GYRO_GRAPH_LIM: u8 = 45;
 
@@ -230,7 +231,15 @@ impl FranklinClient {
             } else if identifier == "Gyro Offset" {
                 value -= 128.;
                 value /= 10.;
-            }
+            } else
+
+            {match identifier.as_str() {
+                "Gyro Value" => {value/=100.;},
+                "Gyro Offset" => {value = (value - 128.)/10.},
+                "Integral Sum" => {value /= 10.}
+                "Motor Target" => {value /= 100.}
+                _ => ()
+            };}
 
             map.insert(identifier, value);
         }
@@ -264,11 +273,71 @@ impl PythonClient {
 
         PythonClient { socket }
     }
+
+    fn create_header(&mut self, operation_code: u8, content_length: u16) -> Vec<u8> {
+        let mut header: Vec<u8> = vec![70, 70, operation_code];
+
+        let c1: u8 = (content_length >> 8) as u8;
+        let c2 = content_length as u8;
+
+        header.push(c1);
+        header.push(c2);
+
+        header
+    }
+    fn send_message(&mut self, message: &str) {
+        let mut message_buf = Vec::new();
+
+        message_buf.extend(self.create_header(0, message.len() as u16));
+        message_buf.extend_from_slice(message.as_bytes());
+
+        println!("debug: sending message {:?}", &message_buf);
+
+        self.socket.write(&message_buf).unwrap();
+    }
+
+    fn stop(&mut self) {
+        let mut header = self.create_header(1, 1);
+        header.push(0);
+        self.socket.write(&header).unwrap();
+    }
+
+    fn send_update_json(&mut self, map: HashMap<String, f32>) {
+        let mut outbound: Vec<char> = Vec::new();
+
+        outbound.push('{');
+        for (i, key) in map.keys().enumerate() {
+            let value = map.get(key).unwrap().to_string();
+
+            outbound.push('"');
+            outbound.extend(key.chars());
+            outbound.push('"');
+            outbound.push(':');
+            outbound.extend(value.chars());
+
+            if i != map.len() - 1 {
+                outbound.push(',');
+            }
+        }
+        outbound.push('}');
+
+        let content_length: u16 = outbound.len() as u16;
+        let outbound_string: String = outbound.into_iter().collect();
+
+        println!("sending update: {}", outbound_string);
+
+        let mut header = self.create_header(2, content_length);
+
+        header.extend_from_slice(outbound_string.as_bytes());
+
+        self.socket.write(&header).unwrap();
+    }
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut franklin_container: Option<FranklinClient> = None;
+    let mut python_client_container: Option<PythonClient> = None;
 
     if args.len() > 1 && args[1].to_lowercase() == "skip" {
         println!("info: skipping franklin login")
@@ -278,11 +347,11 @@ fn main() {
         franklin_container = Some(franklin);
         let franklin = match &mut franklin_container {
             Some(franklin) => franklin,
-            None => panic!("lost reference to franklin during setup")
+            None => panic!("lost reference to franklin during setup"),
         };
 
         thread::sleep(Duration::from_millis(1000));
-        println!("info: connected to clientet");
+        println!("info: connected to client");
 
         franklin.send_message("hello from rust".to_string());
 
@@ -317,181 +386,222 @@ fn main() {
         let command: Vec<&str> = command_raw.split(' ').collect();
 
         match command[0] {
-            "pid" => {
+            "pid" => match &mut franklin_container {
+                Some(franklin) => {
+                    if command.len() != 3 {
+                        println!("error: missing arguments");
+                        continue;
+                    }
 
-                match &mut franklin_container {
-                    Some(franklin) => {
-                        if command.len() != 3 {
-                            println!("error: missing arguments");
+                    let target = match command[1] {
+                        "d" => VariableUpdateTarget::PidDerivative,
+                        "p" => VariableUpdateTarget::PidProportional,
+                        "i" => VariableUpdateTarget::PidIntegral,
+                        _ => {
+                            println!("error: invalid pid target '{}'", command[1]);
                             continue;
                         }
-        
-                        let target = match command[1] {
-                            "d" => VariableUpdateTarget::PidDerivative,
-                            "p" => VariableUpdateTarget::PidProportional,
-                            "i" => VariableUpdateTarget::PidIntegral,
-                            _ => {
-                                println!("error: invalid pid target '{}'", command[1]);
-                                continue;
-                            }
-                        };
-        
-                        let value = match command[2].to_string().parse::<usize>() {
-                            Ok(val) => val,
-                            Err(err) => {
-                                println!("error: illegal value {}", command[2]);
-                                continue;
-                            }
-                        };
-        
-                        franklin.send_update(target, value);
-                    },
-                    None => {
-                        println!("error: not connected to franklin")
-                    }
-                }
-            }
-            "mot" => {
-                match &mut franklin_container {
-                    Some(franklin) => {
-                        if command.len() != 2 {
-                            println!("error: missing arguments");
-                            continue;
-                        }
-        
-                        let value = match command[1] {
-                            "on" => 1,
-                            "off" => 0,
-                            _ => {
-                                println!("error: invalid argument. expected enable/disable");
-                                continue;
-                            }
-                        };
-        
-                        franklin.send_update(VariableUpdateTarget::MotorEnabled, value);
-                    },
-                    None => {
-                        println!("error: not connected to franklin")
-                    }
-                }
-            }
-            "gyro" => {
-                match &mut franklin_container {
-                    Some(franklin) => {
-                        if command.len() != 2 {
-                            println!("error: missing arguments");
-                            continue;
-                        }
-        
-                        let value_float = match command[1].to_string().parse::<f32>() {
-                            Ok(val) => val,
-                            Err(err) => {
-                                println!("error: illegal value {}", command[2]);
-                                continue;
-                            }
-                        };
-        
-                        let value = (value_float.round() as i32 * 10 + 128) as usize;
-        
-                        franklin.send_update(VariableUpdateTarget::GyroOffset, value)
-                    },
-                    None => {
-                        println!("error: not connected to franklin")
-                    }
-                }
-            }
-            "graph" => {
-                match &mut franklin_container {
-                    Some(franklin) => {
+                    };
 
-                        if command.len() != 2 {
-                            println!("error: missing arguments");
+                    let value = match command[2].to_string().parse::<usize>() {
+                        Ok(val) => val,
+                        Err(err) => {
+                            println!("error: illegal value {}", command[2]);
                             continue;
                         }
-        
-                        let (width, _height) = match dimensions() {
-                            Some((w, h)) => (w, h),
-                            None => panic!("unable to determine console width"),
-                        };
-        
-                        let start = Instant::now();
-        
-                        let duration = match command[1].to_string().parse::<u64>() {
-                            Ok(val) => val,
-                            Err(err) => {
-                                println!("error: illegal value {}", command[2]);
-                                continue;
-                            }
-                        };
-        
-                        while (Instant::now() - start).as_secs() < duration {
-                            let map = franklin.poll_status(false);
-                            sleep(Duration::from_millis(10));
-        
-                            let gyro_value = map.get("Gyro Value").unwrap();
-        
-                            let mut scale = gyro_value / GYRO_GRAPH_LIM as f32;
-                            if scale.abs() > 1. {
-                                scale = scale / scale.abs();
-                            }
-        
-                            let delta_cells = ((width as f32 / 2.) * scale).floor() as i16;
-                            let total_cells = ((width as f32 / 2.).floor() as i16 + delta_cells) as usize;
-        
-                            let mut output: Vec<char> = Vec::with_capacity(width);
-        
-                            for _ in 0..total_cells {
-                                output.push('█');
-                            }
-        
-                            let leftover = width - output.len();
-        
-                            for _ in 0..leftover {
-                                output.push(' ')
-                            }
-        
-                            output[width / 2] = '|';
-        
-                            let final_str: String = output.into_iter().collect();
-                            println!("{}", final_str);
+                    };
+
+                    franklin.send_update(target, value);
+                }
+                None => {
+                    println!("error: not connected to franklin")
+                }
+            },
+            "mot" => match &mut franklin_container {
+                Some(franklin) => {
+                    if command.len() != 2 {
+                        println!("error: missing arguments");
+                        continue;
+                    }
+
+                    let value = match command[1] {
+                        "on" => 1,
+                        "off" => 0,
+                        _ => {
+                            println!("error: invalid argument. expected enable/disable");
+                            continue;
                         }
-                    },
-                    None => {
-                        println!("error: not connected to franklin")
+                    };
+
+                    franklin.send_update(VariableUpdateTarget::MotorEnabled, value);
+                }
+                None => {
+                    println!("error: not connected to franklin")
+                }
+            },
+            "gyro" => match &mut franklin_container {
+                Some(franklin) => {
+                    if command.len() != 2 {
+                        println!("error: missing arguments");
+                        continue;
+                    }
+
+                    let value_float = match command[1].to_string().parse::<f32>() {
+                        Ok(val) => val,
+                        Err(err) => {
+                            println!("error: illegal value {}", command[2]);
+                            continue;
+                        }
+                    };
+
+                    let value = (value_float.round() as i32 * 10 + 128) as usize;
+
+                    franklin.send_update(VariableUpdateTarget::GyroOffset, value)
+                }
+                None => {
+                    println!("error: not connected to franklin")
+                }
+            },
+            "graph" => match &mut franklin_container {
+                Some(franklin) => {
+                    if command.len() != 2 {
+                        println!("error: missing arguments");
+                        continue;
+                    }
+
+                    let (width, _height) = match dimensions() {
+                        Some((w, h)) => (w, h),
+                        None => panic!("unable to determine console width"),
+                    };
+
+                    let start = Instant::now();
+
+                    let duration = match command[1].to_string().parse::<u64>() {
+                        Ok(val) => val,
+                        Err(err) => {
+                            println!("error: illegal value {}", command[2]);
+                            continue;
+                        }
+                    };
+
+                    while (Instant::now() - start).as_secs() < duration {
+                        let map = franklin.poll_status(false);
+                        sleep(Duration::from_millis(10));
+
+                        let gyro_value = map.get("Gyro Value").unwrap();
+
+                        let mut scale = gyro_value / GYRO_GRAPH_LIM as f32;
+                        if scale.abs() > 1. {
+                            scale = scale / scale.abs();
+                        }
+
+                        let delta_cells = ((width as f32 / 2.) * scale).floor() as i16;
+                        let total_cells =
+                            ((width as f32 / 2.).floor() as i16 + delta_cells) as usize;
+
+                        let mut output: Vec<char> = Vec::with_capacity(width);
+
+                        for _ in 0..total_cells {
+                            output.push('█');
+                        }
+
+                        let leftover = width - output.len();
+
+                        for _ in 0..leftover {
+                            output.push(' ')
+                        }
+
+                        output[width / 2] = '|';
+
+                        let final_str: String = output.into_iter().collect();
+                        println!("{}", final_str);
                     }
                 }
-            }
+                None => {
+                    println!("error: not connected to franklin")
+                }
+            },
             "python" => {
-                if command.len() != 2 {
+                if command.len() < 2 {
                     println!("error: missing arguments");
                     continue;
                 }
 
-                if command[1] == "begin" {
-                } else {
-                    println!("error: invalid argument {}", command[1])
-                }
-            }
-            "ping" => {
-                match &mut franklin_container{
-                    Some(franklin) => {
-                        franklin.send_ping();
-                    },
-                    None => {
-                        println!("error: not connected to franklin")
+                match command[1] {
+                    "begin" => {
+                        python_client_container = Some(PythonClient::new(PYTHON_ADDR));
                     }
-                }
-            }
-            "poll" => {
-                match &mut franklin_container{
-                    Some(franklin) => {
-                        franklin.poll_status(true);
-                    },
-                    None => {
-                        println!("error: not connected to franklin")
+                    "msg" => {
+                        if command.len() != 3 {
+                            println!("error: missing arguments");
+                            continue;
+                        }
+                        if let Some(python_client) = &mut python_client_container {
+                            python_client.send_message(command[2]);
+                        } else {
+                            println!("error: python not connected")
+                        }
                     }
+                    "stream" => {
+                        if command.len() != 3 {
+                            println!("error: missing arguments");
+                            continue;
+                        }
+
+                        if let Some(python_client) = &mut python_client_container {
+
+                            if let Some(franklin) = &mut franklin_container {
+                                let start = Instant::now();
+    
+                                let duration = match command[2].to_string().parse::<u64>() {
+                                    Ok(val) => val,
+                                    Err(err) => {
+                                        println!("error: illegal value {}: {err}", command[2]);
+                                        continue;
+                                    }
+                                };
+    
+                                while (Instant::now() - start).as_secs() < duration {
+                                    python_client.send_update_json(franklin.poll_status(false));
+    
+                                    sleep(Duration::from_millis(50));
+                                }
+                            }
+                            else {
+                                println!("error: franklin not connected")
+                            }
+
+
+                        } else {
+                            println!("error: python not connected")
+                        }
+                    }
+                    "stop" => {
+                        if let Some(python_client) = &mut python_client_container {
+                            python_client.stop();
+                        } else {
+                            println!("error: python not connected")
+                        }
+                    }
+                    _ => println!("error: invalid argument {}", command[1]),
                 }
             }
+            "ping" => match &mut franklin_container {
+                Some(franklin) => {
+                    franklin.send_ping();
+                }
+                None => {
+                    println!("error: not connected to franklin")
+                }
+            },
+            "poll" => match &mut franklin_container {
+                Some(franklin) => {
+                    franklin.poll_status(true);
+                }
+                None => {
+                    println!("error: not connected to franklin")
+                }
+            },
             "exit" => std::process::exit(0),
             "" => {}
             _ => println!("error: unknown command"),
