@@ -266,7 +266,9 @@ void telemetry_loop(void *_)
 
         double error = theta_y - target_theta_y + gyro_offset();
 
-        double delta_time = (micros() - last_poll) / 1E6;
+        double now = micros();
+        double delta_time = (now - last_poll) / 1E6;
+        last_poll = now;
 
         MotorTarget new_target = run_pid(error, delta_time);
 
@@ -300,6 +302,9 @@ void telemetry_loop(void *_)
         else {
             Serial.println("error: failed to acquire gyro mutex for update");
         }
+
+        // Serial.print("delta time: ");
+        // Serial.println(delta_time);
 
 
         delay(GYRO_POLL_DELAY);
