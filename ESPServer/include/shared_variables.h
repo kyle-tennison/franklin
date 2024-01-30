@@ -14,7 +14,7 @@ struct KinematicState
   int16_t linear_velocity_target;
   int16_t angular_velocity_target;
   bool motors_enabled;
-  uint8_t gyro_offset;
+  double gyro_offset;
 };
 
 struct MotorTarget
@@ -51,6 +51,8 @@ void instantiate_shared()
   kinematic_state_mutex = xSemaphoreCreateMutex();
   kinematic_state.linear_velocity_target = 40;
   kinematic_state.angular_velocity_target = 0;
+  kinematic_state.motors_enabled = false;
+  kinematic_state.gyro_offset = 0;
 
   motor_target_mutex = xSemaphoreCreateMutex();
   motor_target.mot_1_omega = 0;

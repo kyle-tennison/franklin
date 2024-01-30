@@ -36,7 +36,7 @@ public:
   /// @return The WiFiClient of the incoming connection
   WiFiClient accept()
   {
-    debug_print("debug: waiting for client...");
+    debug_println("debug: waiting for client...");
     while (1)
     {
       WiFiClient client = server->accept();
@@ -65,70 +65,65 @@ public:
     uint8_t *payload = NULL;
     uint16_t payload_index = 0;
     uint16_t payload_length = 0;
-    bool payload_length_set = false;
 
-    // while (client->connected())
+    uint8_t b1 = 0;
+    uint8_t b2 = 0;
+
+    debug_println("debug: resolving incoming request");
+
     uint32_t start_time = millis();
     while (1)
     {
 
-      // if (millis() - start_time > 5000)
-      // {
-
-      //   if (read == 0)
-      //   {
-      //     Serial.println("error: connection timed out");
-      //     client->stop();
-      //     return OperationRequest{false, 0, NULL, 0, NULL};
-      //   }
-      //   else
-      //   {
-          if (!client->connected())
-          {
-            Serial.println("error: client lost connection");
-            return OperationRequest{false, 0, NULL, 0, NULL};
-          }
-      //   }
-      // }
+      if (millis() - start_time > REQUEST_TIMEOUT_MILLIS)
+      {
+        if (!client->connected())
+        {
+          Serial.println("error: client lost connection");
+          return OperationRequest{false, 0, NULL, 0, NULL};
+        }
+        else
+        {
+          Serial.println("error: request timed out");
+          return OperationRequest{false, 0, NULL, 0, NULL};
+        }
+      }
 
       if (client->available())
       {
         uint8_t recv = client->read();
 
+        // Check for header bytes
         if (read < 2 && recv != HEADER_BYTE)
         {
-          Serial.println("error: expected header byte");
+          Serial.print("error: expected header byte, found ");
+          Serial.println(recv);
           continue;
         }
-        else if (read == 2)
-        {
-          operation = recv;
-        }
-        else if (read == 3)
-        {
-          payload_length = recv;
-        }
+
+        // Parse header and load payload
         else
         {
-          if (!payload_length_set)
+          switch (read)
           {
-            if (recv != 0)
-            {
-              payload_length += recv;
-            }
-            else
-            {
-              debug_print("debug: determined content length to be ");
-              debug_print(payload_length);
-              payload_length_set = true;
-              payload = (uint8_t *)malloc(payload_length);
-            }
-          }
-          else
-          {
+          case 0: break;
+          case 1: break;
+          case 2:
+            operation = recv;
+            break;
+          case 3:
+            b1 = recv;
+            break;
+          case 4:
+            b2 = recv;
+            payload_length = b1 << 8 | b2;
+            payload = (uint8_t *)malloc(payload_length);
+            break;
+          default:
             if (payload == NULL)
             {
-              Serial.println("error: payload pointer is null; memory error");
+              Serial.print("error: tried to write to null payload pointer. read index is ");
+              Serial.println(read);
             }
             else
             {
@@ -144,14 +139,15 @@ public:
         delay(1);
       }
 
-      if (payload_index == payload_length && payload_length_set)
+      if (payload_index == payload_length && payload != NULL)
       {
-        // debug_print("debug: received the following payload");
-        // for (uint8_t i = 0; i < payload_length; i++)
-        // {
-        //   Serial.print("  ");
-        //   Serial.print(*(payload + i), HEX);
-        // }
+        debug_print("debug: received the following payload: ");
+        for (uint8_t i = 0; i < payload_length; i++)
+        {
+          debug_print("  ");
+          debug_print(*(payload + i));
+        }
+        debug_println();
 
         return OperationRequest{true, operation, payload, payload_length, client};
       }
@@ -162,10 +158,10 @@ public:
     return OperationRequest{false, 0, NULL, 0, NULL};
   }
 
-
-  /// @brief echos bytes from the client 
+  /// @brief echos bytes from the client
   /// @param operation the operation to respond to
-  void echo(OperationRequest *operation)
+  void
+  echo(OperationRequest *operation)
   {
 
     if (operation->payload == NULL)
@@ -182,7 +178,8 @@ public:
     Serial.println("info: echoed payload");
   }
 
-  void status_poll(OperationRequest *operation) {
+  void status_poll(OperationRequest *operation)
+  {
 
     PidState pid_state_copy;
     KinematicState kinematic_state_copy;
@@ -193,7 +190,8 @@ public:
       pid_state_copy = pid_state;
       xSemaphoreGive(pid_state_mutex);
     }
-    else {
+    else
+    {
       Serial.println("error: failed to acquire PID mutex for status poll");
       return;
     }
@@ -203,8 +201,9 @@ public:
       kinematic_state_copy = kinematic_state;
       xSemaphoreGive(kinematic_state_mutex);
     }
-    else {
-      Serial.println("error: failed to acquire PID mutex for status poll");
+    else
+    {
+      Serial.println("error: failed to acquire kinematic state mutex for status poll");
       return;
     }
 
@@ -213,30 +212,32 @@ public:
       motion_info_copy = motion_info;
       xSemaphoreGive(motion_info_mutex);
     }
-    else {
+    else
+    {
       Serial.println("error: failed to acquire gyro mutex for status poll");
       return;
     }
 
     uint8_t i = 0;
-    uint16_t variables[] ={
-      pid_state_copy.proportional,
-      pid_state_copy.integral,
-      pid_state_copy.derivative,
-      ((kinematic_state_copy.motors_enabled) ? (uint8_t)1 : (uint8_t)0),
-      kinematic_state_copy.gyro_offset,
-      motion_info_copy.gyro_value * 100,
-      motion_info_copy.integral_sum * 10,
-      motion_info_copy.motor_target * 100,
+    int16_t variables[] = {
+        pid_state_copy.proportional,
+        pid_state_copy.integral,
+        pid_state_copy.derivative,
+        ((kinematic_state_copy.motors_enabled) ? (uint8_t)1 : (uint8_t)0),
+        kinematic_state_copy.gyro_offset * 10.0,
+        motion_info_copy.gyro_value * 100.0,
+        motion_info_copy.integral_sum * 10.0,
+        motion_info_copy.motor_target * 100.0,
     };
 
     uint8_t max_packet_size = 4 * sizeof(variables) / 2;
 
-    uint8_t* payload = (uint8_t*)malloc(max_packet_size);
+    uint8_t *payload = (uint8_t *)malloc(max_packet_size);
 
     uint8_t payload_index = 0;
-    for (uint8_t i = 0; i < sizeof(variables) / 2; i++){
-      uint16_t* var = &variables[i];
+    for (uint8_t i = 0; i < sizeof(variables) / 2; i++)
+    {
+      int16_t *var = &variables[i];
 
       uint8_t b0 = (*var >> 8) & 0x00FF;
       uint8_t b1 = (*var >> 0) & 0x00FF;
@@ -249,18 +250,19 @@ public:
     };
 
     // send header
-    uint8_t header [] = {70, 70, 0, payload_index, 0};
-    for (uint8_t i = 0; i < sizeof(header); i++){
+    uint8_t header[] = {70, 70, 0, payload_index, 0};
+    for (uint8_t i = 0; i < sizeof(header); i++)
+    {
       operation->client->write(header[i]);
     }
 
-    for (uint8_t i = 0; i < payload_index; i++){
+    for (uint8_t i = 0; i < payload_index; i++)
+    {
       operation->client->write(*(payload + i));
     }
 
     free(payload);
   }
-
 
 public:
   WiFiServer *server;
@@ -268,7 +270,7 @@ public:
 
 void handle_message(OperationRequest *operation);
 void handle_var_update(OperationRequest *operation);
-bool handle_var_update_inner(uint8_t target, uint16_t value);
+bool handle_var_update_inner(uint8_t target, int16_t value);
 void websocket_loop(void *_);
 
 /// @brief relays general message from websocket to serial
@@ -314,29 +316,14 @@ void handle_var_update(OperationRequest *operation)
   else
   {
 
-    uint8_t target = UINT8_MAX;
-    uint16_t value = 0;
+    uint8_t target = *(operation->payload);
 
-    for (uint16_t i = 0; i < operation->payload_length; i++)
-    {
+    uint8_t b1 = *(operation->payload + 1);
+    uint8_t b2 = *(operation->payload + 2);
 
-      uint8_t recv = *(operation->payload + i);
+    int16_t value = b1 << 8 | b2;
 
-      if (target == UINT8_MAX)
-      {
-        target = recv;
-      }
-      else if (recv == 0)
-      {
-        handle_var_update_inner(target, value);
-        target = UINT8_MAX;
-        value = 0;
-      }
-      else
-      {
-        value += recv;
-      }
-    }
+    handle_var_update_inner(target, value);
   }
 }
 
@@ -344,7 +331,7 @@ void handle_var_update(OperationRequest *operation)
 /// @param target is the integer id of the variable to target
 /// @param value is the value to assign to the targeted integer
 /// @return true if the variable is successfully updated, false otherwise
-bool handle_var_update_inner(uint8_t target, uint16_t value)
+bool handle_var_update_inner(uint8_t target, int16_t value)
 {
 
   // lock corresponding mutex
@@ -363,11 +350,11 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
     debug_print("Kinematic Mutex");
   }
 
-  debug_print("...");
+  debug_println("...");
 
   if (xSemaphoreTake(*mutex, pdMS_TO_TICKS(MUTEX_MAX_WAIT)) == pdTRUE)
   {
-    debug_print("debug: acquired mutex");
+    debug_println("debug: acquired mutex");
   }
   else
   {
@@ -409,8 +396,8 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
     break;
   case 6:
     Serial.print("info: updating gyro offset to ");
-    Serial.println((double)(value - 128)/10);
-    kinematic_state.gyro_offset = value;
+    Serial.println((double)value / 10);
+    kinematic_state.gyro_offset = value / 10;
     break;
   default:
     Serial.print("error: received unknown target ");
@@ -418,7 +405,7 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
   }
 
   xSemaphoreGive(*mutex);
-  debug_print("debug: returned mutex");
+  debug_println("debug: returned mutex");
 
   return true;
 }
@@ -428,13 +415,13 @@ bool handle_var_update_inner(uint8_t target, uint16_t value)
 void websocket_loop(void *_)
 {
 
-  debug_print("debug: opened websocket handler");
+  debug_println("debug: opened websocket handler");
   delay(1000);
   Serial.println("info: starting server...");
   WiFiServer server(SERVER_PORT);
   WebsocketServer sock;
   sock.begin(&server);
-  debug_print("debug: instantiated server");
+  debug_println("debug: instantiated server");
 
   WiFiClient client = sock.accept();
 
@@ -460,19 +447,19 @@ void websocket_loop(void *_)
     switch (request.operation_code)
     {
     case 0:
-      debug_print("debug: dispatching to message");
+      debug_println("debug: dispatching to message");
       handle_message(&request);
       break;
     case 1:
-      debug_print("debug: dispatching to variable update");
+      debug_println("debug: dispatching to variable update");
       handle_var_update(&request);
       break;
     case 2:
-      debug_print("debug: dispatching to echo");
+      debug_println("debug: dispatching to echo");
       sock.echo(&request);
       break;
     case 3:
-      debug_print("debug: dispatching to status poll");
+      debug_println("debug: dispatching to status poll");
       sock.status_poll(&request);
       break;
     default:

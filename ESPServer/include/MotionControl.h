@@ -22,11 +22,11 @@ Runs in core zero along with WebsocketServer.
 
 #define KYLE_CONSTANT 0.8
 
-#define PROPORTIONAL_SCALE 20 // ^-1
-#define INTEGRAL_SCALE 5
-#define DERIVATIVE_SCALE -20
+#define PROPORTIONAL_SCALE 200 // ^-1
+#define INTEGRAL_SCALE 50
+#define DERIVATIVE_SCALE -200
 
-#define MAXIMUM_INTEGRAL 10
+#define MAXIMUM_INTEGRAL 100
 
 /// @brief stores the previous state of the MPU
 struct GyroRecord
@@ -101,7 +101,6 @@ Angles angle_from_accel(double accel_x, double accel_y, double accel_z)
     // calibrate
     theta_y -= 90;
     theta_y *= -1;
-    theta_y -= gyro_offset();
 
     if (theta_y < -180)
     {
@@ -197,13 +196,13 @@ MotorTarget run_pid(double error, double delta_time)
 
 
     double proportional = error;
-    integral += error / delta_time;
+    integral += error / (delta_time * 100);
     double derivative = (error - previous) / delta_time;
     previous = error;
 
-    double output = ((last_pid.proportional / PROPORTIONAL_SCALE) * proportional) +
-                    ((last_pid.integral * INTEGRAL_SCALE) * integral) +
-                    ((last_pid.derivative / DERIVATIVE_SCALE) * derivative);
+    double output = (((double)last_pid.proportional / PROPORTIONAL_SCALE) * proportional) +
+                    (((double)last_pid.integral / INTEGRAL_SCALE) * integral) +
+                    (((double)last_pid.derivative / DERIVATIVE_SCALE) * derivative);
 
     if (output >= MAX_ANGULAR_VELOCITY)
     {
@@ -229,16 +228,23 @@ bool check_enabled()
         last_enabled = kinematic_state.motors_enabled;
         xSemaphoreGive(kinematic_state_mutex);
     }
+    else {
+        // debug_println("debug: failed to check motor enable state");
+    }
 
     return last_enabled;
 }
 
 // Updates the gyro offset
 double gyro_offset(){
-   if (xSemaphoreTake(kinematic_state_mutex, 0) == 0)
+   if (xSemaphoreTake(kinematic_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE)
     {
-        last_gyro_offset = (kinematic_state.gyro_offset - 128) / 10.0;
+        last_gyro_offset = kinematic_state.gyro_offset;
         xSemaphoreGive(kinematic_state_mutex);
+        // debug_println("debug: updated gyro offset");
+    }
+    else {
+        // debug_println("debug: failed to update gyro offset");
     }
 
     return last_gyro_offset;
@@ -252,19 +258,18 @@ void telemetry_loop(void *_)
 
     // let websocket start first
     delay(2000);
-    debug_print("debug: starting telemetry loop");
+    debug_println("debug: starting telemetry loop");
     last_poll = micros();
 
     setup_gyro();
 
     while (1)
     {
-
-        double theta_y = poll_gyro().theta_y;
+        double theta_y = poll_gyro().theta_y + gyro_offset();
 
         double target_theta_y = 0;
 
-        double error = theta_y - target_theta_y + gyro_offset();
+        double error = theta_y - target_theta_y;
 
         double now = micros();
         double delta_time = (now - last_poll) / 1E6;
@@ -300,7 +305,7 @@ void telemetry_loop(void *_)
             xSemaphoreGive(motion_info_mutex);
         }
         else {
-            Serial.println("error: failed to acquire gyro mutex for update");
+            Serial.println("error: failed to acquire motion_info mutex for update");
         }
 
         // Serial.print("delta time: ");

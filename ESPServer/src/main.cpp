@@ -1,16 +1,17 @@
 #include <Arduino.h>
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
-#define debug_print(message) Serial.println(message)
+#define debug_print(message) Serial.print(message)
+#define debug_println(message) Serial.println(message)
 #else
 #define debug_print(message)
+#define debug_println(message)
 #endif
 
 #include <WebsocketServer.h>
 #include <MotorDrive.h>
 #include <constants.h>
-#include <common.h>
 #include <shared_variables.h>
 #include <MotionControl.h>
 

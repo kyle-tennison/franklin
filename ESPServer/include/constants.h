@@ -7,6 +7,7 @@
 #define SERVER_PORT 80
 #define HEADER_BYTE 0x46
 #define MUTEX_MAX_WAIT 10000
+#define REQUEST_TIMEOUT_MILLIS 5000
 
 #define DIR_PIN_1 23
 #define DIR_PIN_2 32
