@@ -22,7 +22,7 @@ int32_t current_wait_2 = 500;
 /// @brief converts motor angular velocity into the corresponding pulse delay. Called in core 1 only
 /// @param angular_velocity is the targetted angular velocity
 /// @return the delay, in microseconds, to pulse to meet the target angular velocity
-int32_t angular_vel_to_step_delay(float angular_velocity)
+int32_t angular_vel_to_step_delay(double angular_velocity)
 {
     if (abs(angular_velocity) < 1)
     {
@@ -30,6 +30,19 @@ int32_t angular_vel_to_step_delay(float angular_velocity)
     }
 
     return (int32_t)((2 * 3.141592 * 1E6) / (STEPS_PER_REV * angular_velocity));
+}
+
+
+void update_motor_targets(){
+    MotorQueueItem new_target;
+
+    if (xQueueReceive(motor_update_queue, &new_target, 0) == pdPASS) {
+        // debug_println("debug: updating motor target in stepper loop")
+    }
+
+    current_wait_1 = angular_vel_to_step_delay(new_target.motor_target.mot_1_omega);
+    current_wait_2 = angular_vel_to_step_delay(new_target.motor_target.mot_2_omega);
+
 }
 
 /// @brief a real-time loop that sends steps to the motor. Runs on core 1
@@ -79,16 +92,8 @@ void stepper_loop(void *_)
             last_step_s2 = now;
         }
 
-        if (xSemaphoreTake(motor_target_mutex, 0) == pdTRUE)
-        {
-            current_wait_1 = angular_vel_to_step_delay(motor_target.mot_1_omega);
-            current_wait_2 = angular_vel_to_step_delay(motor_target.mot_2_omega);
-            xSemaphoreGive(motor_target_mutex);
-        }
-        else
-        {
-            // Serial.println("warn [pwm]: kinematic state mutex busy");
-            continue;
-        }
+        update_motor_targets();
+
+        
     }
 }

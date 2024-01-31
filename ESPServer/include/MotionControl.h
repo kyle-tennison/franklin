@@ -44,12 +44,10 @@ struct Angles
 };
 
 GyroRecord gyro_record;
-PidState last_pid;             // used in case the PID mutex is busy; effectively caches the PID parameters
+KinematicState kinematic_state;
+PidState pid_state;
+uint32_t last_poll = 0;
 double integral, previous = 0; // used in pid loop
-bool last_enabled = false;
-double last_gyro_offset = 0;
-
-double gyro_offset();
 
 /// @brief Sets up the gyroscope
 void setup_gyro()
@@ -188,21 +186,14 @@ Angles poll_gyro()
 MotorTarget run_pid(double error, double delta_time)
 {
 
-    if (xSemaphoreTake(pid_state_mutex, 0) == 0)
-    {
-        last_pid = pid_state;
-        xSemaphoreGive(pid_state_mutex);
-    }
-
-
     double proportional = error;
     integral += error / (delta_time * 100);
     double derivative = (error - previous) / delta_time;
     previous = error;
 
-    double output = (((double)last_pid.proportional / PROPORTIONAL_SCALE) * proportional) +
-                    (((double)last_pid.integral / INTEGRAL_SCALE) * integral) +
-                    (((double)last_pid.derivative / DERIVATIVE_SCALE) * derivative);
+    double output = (((double)pid_state.proportional / PROPORTIONAL_SCALE) * proportional) +
+                    (((double)pid_state.integral / INTEGRAL_SCALE) * integral) +
+                    (((double)pid_state.derivative / DERIVATIVE_SCALE) * derivative);
 
     if (output >= MAX_ANGULAR_VELOCITY)
     {
@@ -220,52 +211,82 @@ MotorTarget run_pid(double error, double delta_time)
         output};
 }
 
-// Checks kinematic state mutex to see if the motor is enabled
-bool check_enabled()
-{
-    if (xSemaphoreTake(kinematic_state_mutex, 0) == 0)
-    {
-        last_enabled = kinematic_state.motors_enabled;
-        xSemaphoreGive(kinematic_state_mutex);
+
+void check_incoming_queue(){
+
+    ConfigQueueItem incoming_item;
+
+    if (xQueueReceive(sock_to_motion_queue, &incoming_item, 0) == pdPASS) {
+        debug_println("debug: received from item sock -> motion");
     }
     else {
-        // debug_println("debug: failed to check motor enable state");
+        return;
     }
 
-    return last_enabled;
+    switch (incoming_item.target){
+        case UpdateTarget::PidProportional:
+            pid_state.proportional = incoming_item.value;
+            debug_print("debug: updating PidProportional to ");
+            debug_println(incoming_item.value);
+            break;
+        case UpdateTarget::PidDerivative:
+            pid_state.derivative = incoming_item.value;
+            debug_print("debug: updating PidDerivative to ");
+            debug_println(incoming_item.value);
+            break;
+        case UpdateTarget::PidIntegral:
+            pid_state.integral = incoming_item.value;
+            debug_print("debug: updating PidIntegral to ");
+            debug_println(incoming_item.value);
+            break;
+        case UpdateTarget::MotorsEnabled:
+            kinematic_state.motors_enabled = incoming_item.value == 1;
+            debug_print("debug: updating MotorsEnabled to ");
+            debug_println(incoming_item.value == 1);
+            break;
+        case UpdateTarget::GyroOffset:
+            kinematic_state.gyro_offset = incoming_item.value;
+            debug_print("debug: updating GyroOffset to ");
+            debug_println(incoming_item.value);
+            break;
+        case UpdateTarget::AngularVelocityTarget:
+            kinematic_state.angular_velocity_target = incoming_item.value;
+            debug_print("debug: updating AngularVelocityTarget to ");
+            debug_println(incoming_item.value);
+            break;
+        case UpdateTarget::LinearVelocityTarget:
+            kinematic_state.linear_velocity_target = incoming_item.value;
+            debug_print("debug: updating LinearVelocityTarget to ");
+            debug_println(incoming_item.value);
+            break;
+        default:
+            Serial.print("error: unable to deserialize ConfigQueueItem with target ");
+            Serial.print(incoming_item.target);
+            Serial.println(" in motion loop");
+            return;
+    }
+
 }
 
-// Updates the gyro offset
-double gyro_offset(){
-   if (xSemaphoreTake(kinematic_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE)
-    {
-        last_gyro_offset = kinematic_state.gyro_offset;
-        xSemaphoreGive(kinematic_state_mutex);
-        // debug_println("debug: updated gyro offset");
-    }
-    else {
-        // debug_println("debug: failed to update gyro offset");
-    }
 
-    return last_gyro_offset;
-}
 
 /// @brief interprets sensor inputs and pre-processes for MotorDrive.h
 /// @param _ unused
-uint32_t last_poll = 0;
 void telemetry_loop(void *_)
 {
 
     // let websocket start first
-    delay(2000);
+    delay(4000);
     debug_println("debug: starting telemetry loop");
     last_poll = micros();
 
     setup_gyro();
 
-    while (1)
+    for (;;)
     {
-        double theta_y = poll_gyro().theta_y + gyro_offset();
+        check_incoming_queue();
+
+        double theta_y = poll_gyro().theta_y + kinematic_state.gyro_offset;
 
         double target_theta_y = 0;
 
@@ -281,36 +302,27 @@ void telemetry_loop(void *_)
             integral = MAXIMUM_INTEGRAL * abs(integral) / integral;
         }
 
-        bool motors_enabled = check_enabled();
-        if (!motors_enabled)
+        if (!kinematic_state.motors_enabled)
         {
             new_target.mot_1_omega = 0;
             new_target.mot_2_omega = 0;
         }
 
-        if (xSemaphoreTake(motor_target_mutex, pdMS_TO_TICKS(500)) == pdTRUE)
-        {
-            motor_target = new_target;
-            xSemaphoreGive(motor_target_mutex);
-        }
-        else
-        {
-            continue;
+        MotorQueueItem motor_update;
+        motor_update.motor_target = new_target;
+
+        if (xQueueSend(motor_update_queue, &motor_update, 0) != pdPASS) {
+            debug_println("warning: failed to push update to motor_update_queue");
         }
 
-        if (xSemaphoreTake(motion_info_mutex, pdMS_TO_TICKS(10)) == pdTRUE){
-            motion_info.gyro_value = theta_y;
-            motion_info.integral_sum = integral;
-            motion_info.motor_target = new_target.mot_1_omega;
-            xSemaphoreGive(motion_info_mutex);
-        }
-        else {
-            Serial.println("error: failed to acquire motion_info mutex for update");
-        }
+        MotionInfo motion_info;
+        motion_info.gyro_value = theta_y;
+        motion_info.integral_sum = integral;
+        motion_info.motor_target = new_target.mot_1_omega;
 
-        // Serial.print("delta time: ");
-        // Serial.println(delta_time);
-
+        if (xQueueSend(motion_to_sock_queue, &motion_info, 0) != pdPASS) {
+            // debug_println("warning: failed to push update to motion -> sock");
+        }
 
         delay(GYRO_POLL_DELAY);
     }
