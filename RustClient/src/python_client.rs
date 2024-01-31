@@ -4,13 +4,7 @@ An interface to the local Python socket server (for GUI data)
 January 2024
 */
 
-use std::{
-    collections::{hash_map::OccupiedEntry, HashMap},
-    io::Write,
-    net::TcpStream,
-};
-
-use crate::EspOperation;
+use std::{collections::HashMap, io::Write, net::TcpStream};
 
 /// A client for communicating with the Python socket server
 pub struct PythonClient {
@@ -45,31 +39,29 @@ impl PythonClient {
     /// # Arguments
     /// * `message` - The message to send
     pub fn send_message(&mut self, message: &str) {
-        println!("debug: sending message {:?}", &message);
+        let mut message_buf = Vec::new();
 
-        let header = self.create_header(
-            EspOperation::Message as u8,
-            message.len().try_into().unwrap(),
-        );
+        message_buf.extend(self.create_header(0, message.len() as u16));
+        message_buf.extend_from_slice(message.as_bytes());
 
-        // concat message
-        let mut write_buf: Vec<u8> = Vec::with_capacity(header.len() + 1);
-        write_buf.extend_from_slice(&header);
-        write_buf.extend_from_slice(&message.as_bytes());
+        println!("debug: sending message {:?}", &message_buf);
 
-        self.socket.write(&write_buf).unwrap();
+        self.socket.write(&message_buf).unwrap();
     }
 
     /// Sends a termination message
     pub fn stop(&mut self) {
         let header = self.create_header(1, 1);
 
-        // concat message
-        let mut write_buf: Vec<u8> = Vec::with_capacity(header.len() + 1);
-        write_buf.extend_from_slice(&header);
-        write_buf.push(0);
+        let mut payload: [u8; 6] = [0; 6];
 
-        self.socket.write(&write_buf).unwrap();
+        for i in 0..header.len() {
+            payload[i] = header[i];
+        }
+
+        payload[5] = 0;
+
+        self.socket.write(&header).unwrap();
     }
 
     /// Sends a status update as a json
@@ -100,13 +92,10 @@ impl PythonClient {
 
         println!("sending update: {}", outbound_string);
 
-        let header = self.create_header(EspOperation::StatusRequest as u8, content_length);
+        let mut header = Vec::from_iter(self.create_header(2, content_length));
 
-        // concat message
-        let mut write_buf: Vec<u8> = Vec::with_capacity(header.len() + 1);
-        write_buf.extend_from_slice(&header);
-        write_buf.extend_from_slice(outbound_string.as_bytes());
+        header.extend_from_slice(outbound_string.as_bytes());
 
-        self.socket.write(&write_buf).unwrap();
+        self.socket.write(&header).unwrap();
     }
 }

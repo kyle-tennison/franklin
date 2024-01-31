@@ -8,7 +8,7 @@ class WebsocketServer
 public:
   /// @brief opens ESP as access point and begins WiFiServer
   /// @param s is a pointer to to the server
-  void begin(WiFiServer *s) 
+  void begin(WiFiServer *s)
   {
     this->server = s;
     WiFi.mode(WIFI_AP);
@@ -161,7 +161,10 @@ public:
     }
     else
     {
-      operation->client->write(operation->payload, operation->payload_length);
+      for (uint16_t i = 0; i < operation->payload_length; i++)
+      {
+        operation->client->write(*(operation->payload + i));
+      }
     }
     Serial.println("info: echoed payload");
   }
@@ -241,9 +244,17 @@ public:
       payload_index += 4;
     };
 
+    // send header
     uint8_t header[] = {70, 70, 0, payload_index, 0};
-    operation->client->write(header, sizeof(header));
-    operation->client->write(payload, sizeof(payload_index));
+    for (uint8_t i = 0; i < sizeof(header); i++)
+    {
+      operation->client->write(header[i]);
+    }
+
+    for (uint8_t i = 0; i < payload_index; i++)
+    {
+      operation->client->write(*(payload + i));
+    }
 
     free(payload);
   }
