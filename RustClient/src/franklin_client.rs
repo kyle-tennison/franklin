@@ -45,10 +45,17 @@ impl FranklinClient {
             message_bytes.len().try_into().unwrap(),
         );
 
-        self.socket.write(&header).unwrap();
-        self.socket.write(&message_bytes).unwrap();
+        // concat message
+        let mut write_buf: Vec<u8> = Vec::with_capacity(header.len() + message_bytes.len());
+        write_buf.extend_from_slice(&header);
+        write_buf.extend_from_slice(&message_bytes);
 
-        println!("debug: sending message -- {:?} + {:?}", &header, &message_bytes);
+        self.socket.write(&write_buf).unwrap();
+
+        println!(
+            "debug: sending message -- {:?} + {:?}",
+            &header, &message_bytes
+        );
     }
 
     /// Pings server and times response
@@ -60,14 +67,21 @@ impl FranklinClient {
         let ping_content = "p i n g g g".as_bytes();
         let header = self.create_header(EspOperation::Ping, ping_content.len().try_into().unwrap());
 
-        self.socket.write(&header).unwrap();
-        self.socket.write(ping_content).unwrap();
+        // concat message
+        let mut write_buf: Vec<u8> = Vec::with_capacity(header.len() + ping_content.len());
+        write_buf.extend_from_slice(&header);
+        write_buf.extend_from_slice(&ping_content);
+
+        self.socket.write(&write_buf).unwrap();
 
         let mut ping_response: Vec<u8> = vec![0; ping_content.len()];
         self.socket.read_exact(&mut ping_response).unwrap();
 
-        if ping_response.len() != ping_content.len(){
-            println!("error: did not read entire message back. {:?} != {:?}", &ping_content, &ping_response);
+        if ping_response.len() != ping_content.len() {
+            println!(
+                "error: did not read entire message back. {:?} != {:?}",
+                &ping_content, &ping_response
+            );
         }
 
         for i in 0..ping_response.len() {
@@ -96,8 +110,12 @@ impl FranklinClient {
     pub fn poll_status(&mut self, show: bool) -> HashMap<String, f32> {
         let header = self.create_header(EspOperation::StatusRequest, 1);
 
-        self.socket.write(&header).unwrap();
-        self.socket.write(&[0]).unwrap(); // send a random byte so we don't have an empty packet
+        // concat message
+        let mut write_buf: Vec<u8> = Vec::with_capacity(header.len() + 1);
+        write_buf.extend_from_slice(&header);
+        write_buf.push(0); // send a random byte so we don't have an empty packet
+
+        self.socket.write(&write_buf).unwrap();
 
         let mut status_response: VecDeque<u8> = VecDeque::new();
         let mut content_len: usize = 0;
@@ -229,7 +247,11 @@ impl FranklinClient {
         let payload: [u8; 3] = [target as u8, b1, b2];
         let header = self.create_header(EspOperation::Update, payload.len().try_into().unwrap());
 
-        self.socket.write(&header).unwrap();
-        self.socket.write(&payload).unwrap();
+        // concat message
+        let mut write_buf: Vec<u8> = Vec::with_capacity(header.len() + payload.len());
+        write_buf.extend_from_slice(&header);
+        write_buf.extend_from_slice(&payload);
+
+        self.socket.write(&write_buf).unwrap();
     }
 }
