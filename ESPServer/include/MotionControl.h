@@ -211,64 +211,64 @@ MotorTarget run_pid(double error, double delta_time)
         output};
 }
 
-
-void check_incoming_queue(){
+void check_incoming_queue()
+{
 
     ConfigQueueItem incoming_item;
 
-    if (xQueueReceive(sock_to_motion_queue, &incoming_item, 0) == pdPASS) {
+    if (xQueueReceive(sock_to_motion_queue, &incoming_item, 0) == pdPASS)
+    {
         debug_println("debug: received from item sock -> motion");
     }
-    else {
+    else
+    {
         return;
     }
 
-    switch (incoming_item.target){
-        case UpdateTarget::PidProportional:
-            pid_state.proportional = incoming_item.value;
-            debug_print("debug: updating PidProportional to ");
-            debug_println(incoming_item.value);
-            break;
-        case UpdateTarget::PidDerivative:
-            pid_state.derivative = incoming_item.value;
-            debug_print("debug: updating PidDerivative to ");
-            debug_println(incoming_item.value);
-            break;
-        case UpdateTarget::PidIntegral:
-            pid_state.integral = incoming_item.value;
-            debug_print("debug: updating PidIntegral to ");
-            debug_println(incoming_item.value);
-            break;
-        case UpdateTarget::MotorsEnabled:
-            kinematic_state.motors_enabled = incoming_item.value == 1;
-            debug_print("debug: updating MotorsEnabled to ");
-            debug_println(incoming_item.value == 1);
-            break;
-        case UpdateTarget::GyroOffset:
-            kinematic_state.gyro_offset = incoming_item.value;
-            debug_print("debug: updating GyroOffset to ");
-            debug_println(incoming_item.value);
-            break;
-        case UpdateTarget::AngularVelocityTarget:
-            kinematic_state.angular_velocity_target = incoming_item.value;
-            debug_print("debug: updating AngularVelocityTarget to ");
-            debug_println(incoming_item.value);
-            break;
-        case UpdateTarget::LinearVelocityTarget:
-            kinematic_state.linear_velocity_target = incoming_item.value;
-            debug_print("debug: updating LinearVelocityTarget to ");
-            debug_println(incoming_item.value);
-            break;
-        default:
-            Serial.print("error: unable to deserialize ConfigQueueItem with target ");
-            Serial.print(incoming_item.target);
-            Serial.println(" in motion loop");
-            return;
+    switch (incoming_item.target)
+    {
+    case UpdateTarget::PidProportional:
+        pid_state.proportional = incoming_item.value;
+        debug_print("debug: updating PidProportional to ");
+        debug_println(incoming_item.value);
+        break;
+    case UpdateTarget::PidDerivative:
+        pid_state.derivative = incoming_item.value;
+        debug_print("debug: updating PidDerivative to ");
+        debug_println(incoming_item.value);
+        break;
+    case UpdateTarget::PidIntegral:
+        pid_state.integral = incoming_item.value;
+        debug_print("debug: updating PidIntegral to ");
+        debug_println(incoming_item.value);
+        break;
+    case UpdateTarget::MotorsEnabled:
+        kinematic_state.motors_enabled = incoming_item.value == 1;
+        debug_print("debug: updating MotorsEnabled to ");
+        debug_println(incoming_item.value == 1);
+        break;
+    case UpdateTarget::GyroOffset:
+        kinematic_state.gyro_offset = incoming_item.value;
+        debug_print("debug: updating GyroOffset to ");
+        debug_println(incoming_item.value);
+        break;
+    case UpdateTarget::AngularVelocityTarget:
+        kinematic_state.angular_velocity_target = incoming_item.value;
+        debug_print("debug: updating AngularVelocityTarget to ");
+        debug_println(incoming_item.value);
+        break;
+    case UpdateTarget::LinearVelocityTarget:
+        kinematic_state.linear_velocity_target = incoming_item.value;
+        debug_print("debug: updating LinearVelocityTarget to ");
+        debug_println(incoming_item.value);
+        break;
+    default:
+        Serial.print("error: unable to deserialize ConfigQueueItem with target ");
+        Serial.print(incoming_item.target);
+        Serial.println(" in motion loop");
+        return;
     }
-
 }
-
-
 
 /// @brief interprets sensor inputs and pre-processes for MotorDrive.h
 /// @param _ unused
@@ -298,7 +298,8 @@ void telemetry_loop(void *_)
 
         MotorTarget new_target = run_pid(error, delta_time);
 
-        if (abs(integral) > MAXIMUM_INTEGRAL) {
+        if (abs(integral) > MAXIMUM_INTEGRAL)
+        {
             integral = MAXIMUM_INTEGRAL * abs(integral) / integral;
         }
 
@@ -311,7 +312,8 @@ void telemetry_loop(void *_)
         MotorQueueItem motor_update;
         motor_update.motor_target = new_target;
 
-        if (xQueueSend(motor_update_queue, &motor_update, 0) != pdPASS) {
+        if (xQueueSend(motor_update_queue, &motor_update, 0) != pdPASS)
+        {
             debug_println("warning: failed to push update to motor_update_queue");
         }
 
@@ -320,7 +322,8 @@ void telemetry_loop(void *_)
         motion_info.integral_sum = integral;
         motion_info.motor_target = new_target.mot_1_omega;
 
-        if (xQueueSend(motion_to_sock_queue, &motion_info, 0) != pdPASS) {
+        if (xQueueSend(motion_to_sock_queue, &motion_info, 0) != pdPASS)
+        {
             // debug_println("warning: failed to push update to motion -> sock");
         }
 

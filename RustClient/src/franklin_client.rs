@@ -48,7 +48,7 @@ impl FranklinClient {
         self.socket.write(&header).unwrap();
         self.socket.write(&message_bytes).unwrap();
 
-        println!("debug: sending message -- {:?}", &header);
+        println!("debug: sending message -- {:?} + {:?}", &header, &message_bytes);
     }
 
     /// Pings server and times response
@@ -63,8 +63,12 @@ impl FranklinClient {
         self.socket.write(&header).unwrap();
         self.socket.write(ping_content).unwrap();
 
-        let mut ping_response: Vec<u8> = Vec::with_capacity(ping_content.len());
+        let mut ping_response: Vec<u8> = vec![0; ping_content.len()];
         self.socket.read_exact(&mut ping_response).unwrap();
+
+        if ping_response.len() != ping_content.len(){
+            println!("error: did not read entire message back. {:?} != {:?}", &ping_content, &ping_response);
+        }
 
         for i in 0..ping_response.len() {
             if ping_content[i] != ping_response[i] {
@@ -74,6 +78,8 @@ impl FranklinClient {
                 panic!();
             }
         }
+
+        println!("debug: ping response: {:?}", ping_response);
 
         let elapsed = (Instant::now() - start).as_millis();
         println!("info: pinged server in {elapsed} milliseconds");

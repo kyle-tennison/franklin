@@ -1,16 +1,17 @@
 
-enum UpdateTarget {
-    PidProportional,
-    PidIntegral,
-    PidDerivative,
-    LinearVelocityTarget,
-    AngularVelocityTarget,
-    MotorsEnabled,
-    GyroOffset,
-    GyroValue,
-    MotorTargetOmega,
-    IntegralSum,
-    };
+enum UpdateTarget
+{
+  PidProportional,
+  PidIntegral,
+  PidDerivative,
+  LinearVelocityTarget,
+  AngularVelocityTarget,
+  MotorsEnabled,
+  GyroOffset,
+  GyroValue,
+  MotorTargetOmega,
+  IntegralSum,
+};
 
 /// @brief passed to operation handlers; contains information about request
 struct OperationRequest
@@ -43,17 +44,20 @@ struct MotorTarget
   double mot_2_omega;
 };
 
-struct MotionInfo{
+struct MotionInfo
+{
   double gyro_value;
   double motor_target;
   double integral_sum;
 };
 
-typedef struct {
+typedef struct
+{
   int16_t value;
   UpdateTarget target;
 } ConfigQueueItem;
 
-typedef struct {
+typedef struct
+{
   MotorTarget motor_target;
 } MotorQueueItem;

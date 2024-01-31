@@ -32,17 +32,17 @@ int32_t angular_vel_to_step_delay(double angular_velocity)
     return (int32_t)((2 * 3.141592 * 1E6) / (STEPS_PER_REV * angular_velocity));
 }
 
-
-void update_motor_targets(){
+void update_motor_targets()
+{
     MotorQueueItem new_target;
 
-    if (xQueueReceive(motor_update_queue, &new_target, 0) == pdPASS) {
+    if (xQueueReceive(motor_update_queue, &new_target, 0) == pdPASS)
+    {
         // debug_println("debug: updating motor target in stepper loop")
     }
 
     current_wait_1 = angular_vel_to_step_delay(new_target.motor_target.mot_1_omega);
     current_wait_2 = angular_vel_to_step_delay(new_target.motor_target.mot_2_omega);
-
 }
 
 /// @brief a real-time loop that sends steps to the motor. Runs on core 1
@@ -93,7 +93,5 @@ void stepper_loop(void *_)
         }
 
         update_motor_targets();
-
-        
     }
 }

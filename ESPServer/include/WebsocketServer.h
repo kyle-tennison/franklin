@@ -96,8 +96,10 @@ public:
         {
           switch (read)
           {
-          case 0: break;
-          case 1: break;
+          case 0:
+            break;
+          case 1:
+            break;
           case 2:
             operation = recv;
             break;
@@ -167,41 +169,43 @@ public:
     Serial.println("info: echoed payload");
   }
 
-  void check_incoming_queue(){
-    
+  void check_incoming_queue()
+  {
+
     ConfigQueueItem incoming_item;
 
-    if (xQueueReceive(motion_to_sock_queue, &incoming_item, 0) == pdPASS) {
+    if (xQueueReceive(motion_to_sock_queue, &incoming_item, 0) == pdPASS)
+    {
       debug_println("debug: received item from motion -> sock");
     }
-    else {
+    else
+    {
       return;
     }
 
-    switch (incoming_item.target){
-      case UpdateTarget::GyroValue:
-        motion_info_cache.gyro_value = incoming_item.value;
-        debug_print("debug: updating  to ");
-        debug_println(incoming_item.value);
-        break;
-      case UpdateTarget::IntegralSum:
-        motion_info_cache.integral_sum = incoming_item.value;
-        debug_print("debug: updating  to ");
-        debug_println(incoming_item.value);
-        break;
-      case UpdateTarget::MotorTargetOmega:
-        motion_info_cache.motor_target = incoming_item.value;
-        debug_print("debug: updating  to ");
-        debug_println(incoming_item.value);
-        break;
-      default:
-        Serial.print("error: unable to deserialize ConfigQueueItem with target ");
-        Serial.print(incoming_item.target);
-        Serial.println(" in socket server");
-        return;
+    switch (incoming_item.target)
+    {
+    case UpdateTarget::GyroValue:
+      motion_info_cache.gyro_value = incoming_item.value;
+      debug_print("debug: updating  to ");
+      debug_println(incoming_item.value);
+      break;
+    case UpdateTarget::IntegralSum:
+      motion_info_cache.integral_sum = incoming_item.value;
+      debug_print("debug: updating  to ");
+      debug_println(incoming_item.value);
+      break;
+    case UpdateTarget::MotorTargetOmega:
+      motion_info_cache.motor_target = incoming_item.value;
+      debug_print("debug: updating  to ");
+      debug_println(incoming_item.value);
+      break;
+    default:
+      Serial.print("error: unable to deserialize ConfigQueueItem with target ");
+      Serial.print(incoming_item.target);
+      Serial.println(" in socket server");
+      return;
     }
-
-
   }
 
   void status_poll(OperationRequest *operation)
@@ -261,7 +265,6 @@ private:
   MotionInfo motion_info_cache;
   KinematicState kinematic_state_cache;
   PidState pid_state_cache;
-
 };
 
 void handle_message(OperationRequest *operation);
@@ -323,13 +326,14 @@ void handle_var_update(OperationRequest *operation)
     update.target = UpdateTarget(target);
     update.value = value;
 
-    if (xQueueSend(sock_to_motion_queue, &update, 0) != pdPASS) {
+    if (xQueueSend(sock_to_motion_queue, &update, 0) != pdPASS)
+    {
       Serial.println("warning: failed to send item update");
     }
-    else {
+    else
+    {
       debug_println("debug: added item to motion queue");
     }
-
   }
 }
 
