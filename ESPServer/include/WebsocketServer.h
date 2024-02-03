@@ -61,78 +61,35 @@ public:
 
     debug_println("debug: resolving incoming request");
 
-    uint32_t start_time = millis();
     while (1)
     {
 
-      if (millis() - start_time > REQUEST_TIMEOUT_MILLIS)
+      if (!client->connected())
       {
-        if (!client->connected())
-        {
-          Serial.println("error: client lost connection");
-          return OperationRequest{false, 0, NULL, 0, NULL};
-        }
-        else
-        {
-          Serial.println("error: request timed out");
-          return OperationRequest{false, 0, NULL, 0, NULL};
-        }
+        Serial.println("error: client lost connection");
+        return OperationRequest{false, 0, NULL, 0, NULL};
       }
 
       if (client->available())
       {
-        uint8_t recv = client->read();
+        uint8_t header[5];
+        client->readBytes(header, sizeof(header));
 
-        // Check for header bytes
-        if (read < 2 && recv != HEADER_BYTE)
+        if (!(header[0] == header[1] && header[1] == HEADER_BYTE))
         {
-          Serial.print("error: expected header byte, found ");
-          Serial.println(recv);
+          Serial.println("error: invalid header byte(s): ");
+          Serial.println(header[0]);
+          Serial.println(header[1]);
           continue;
         }
 
-        // Parse header and load payload
-        else
-        {
-          switch (read)
-          {
-          case 0:
-            break;
-          case 1:
-            break;
-          case 2:
-            operation = recv;
-            break;
-          case 3:
-            b1 = recv;
-            break;
-          case 4:
-            b2 = recv;
-            payload_length = b1 << 8 | b2;
-            payload = (uint8_t *)malloc(payload_length);
-            break;
-          default:
-            if (payload == NULL)
-            {
-              Serial.print("error: tried to write to null payload pointer. read index is ");
-              Serial.println(read);
-            }
-            else
-            {
-              *(payload + payload_index) = recv;
-              payload_index++;
-            }
-          }
-        }
-        read++;
-      }
-      else
-      {
-        delay(1);
-      }
+        operation = header[2];
+        payload_length = header[3] << 8 | header[4];
 
-      if (payload_index == payload_length && payload != NULL)
-      {
+        payload = (uint8_t *)malloc(payload_length);
+        client->readBytes(payload, payload_length);
+
+#ifdef DEBUG
         debug_print("debug: received the following payload: ");
         for (uint8_t i = 0; i < payload_length; i++)
         {
@@ -140,8 +97,13 @@ public:
           debug_print(*(payload + i));
         }
         debug_println();
+#endif
 
         return OperationRequest{true, operation, payload, payload_length, client};
+      }
+      else
+      {
+        delay(1);
       }
     }
 
@@ -161,10 +123,7 @@ public:
     }
     else
     {
-      for (uint16_t i = 0; i < operation->payload_length; i++)
-      {
-        operation->client->write(*(operation->payload + i));
-      }
+      operation->client->write(operation->payload, operation->payload_length);
     }
     Serial.println("info: echoed payload");
   }
@@ -172,7 +131,7 @@ public:
   void check_incoming_queue()
   {
 
-    ConfigQueueItem incoming_item;
+    MotionInfoQueueItem incoming_item;
 
     if (xQueueReceive(motion_to_sock_queue, &incoming_item, 0) == pdPASS)
     {
@@ -183,29 +142,8 @@ public:
       return;
     }
 
-    switch (incoming_item.target)
-    {
-    case UpdateTarget::GyroValue:
-      motion_info_cache.gyro_value = incoming_item.value;
-      debug_print("debug: updating  to ");
-      debug_println(incoming_item.value);
-      break;
-    case UpdateTarget::IntegralSum:
-      motion_info_cache.integral_sum = incoming_item.value;
-      debug_print("debug: updating  to ");
-      debug_println(incoming_item.value);
-      break;
-    case UpdateTarget::MotorTargetOmega:
-      motion_info_cache.motor_target = incoming_item.value;
-      debug_print("debug: updating  to ");
-      debug_println(incoming_item.value);
-      break;
-    default:
-      Serial.print("error: unable to deserialize ConfigQueueItem with target ");
-      Serial.print(incoming_item.target);
-      Serial.println(" in socket server");
-      return;
-    }
+    motion_info_cache = incoming_item.motion_info;
+    debug_println("debug: updated motion info cache");
   }
 
   void status_poll(OperationRequest *operation)
@@ -244,17 +182,11 @@ public:
       payload_index += 4;
     };
 
-    // send header
     uint8_t header[] = {70, 70, 0, payload_index, 0};
-    for (uint8_t i = 0; i < sizeof(header); i++)
-    {
-      operation->client->write(header[i]);
-    }
-
-    for (uint8_t i = 0; i < payload_index; i++)
-    {
-      operation->client->write(*(payload + i));
-    }
+    operation->client->write(header, sizeof(header));
+    operation->client->write(payload, payload_index);
+    debug_print("debug: responded to poll request. content length ");
+    debug_println(payload_index);
 
     free(payload);
   }

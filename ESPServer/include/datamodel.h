@@ -59,5 +59,10 @@ typedef struct
 
 typedef struct
 {
+  MotionInfo motion_info;
+} MotionInfoQueueItem;
+
+typedef struct
+{
   MotorTarget motor_target;
 } MotorQueueItem;
