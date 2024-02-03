@@ -12,7 +12,7 @@ void instantiate_shared()
 {
   sock_to_motion_queue = xQueueCreate(10, sizeof(ConfigQueueItem));
   motor_update_queue = xQueueCreate(10, sizeof(MotorQueueItem));
-  motion_to_sock_queue = xQueueCreate(2, sizeof(ConfigQueueItem));
+  motion_to_sock_queue = xQueueCreate(2, sizeof(MotionInfoQueueItem));
 }
 
 #endif
