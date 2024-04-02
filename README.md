@@ -24,7 +24,7 @@ The websockets are fairly minimal; they have a 5-byte header with the following 
 
 `<OPERATION>` is a single byte, allowing 256 different operations to be sent over the websocket, which is more than enough.
 
-`<CONTENT_LEN>` can be any number of bytes. Each additional byte is summed to the previous, which I know is inefficient for very large packets, but such packets are rare and I figured that the overhead would outweigh the benefit. The ESP server knows to stop summing and switch to reading the payload when it sees the final `0x00` at the end of the header.
+`<CONTENT_LEN>` is two bytes that gets parsed into a u16 value, allowing 8,192 bytes of information, which will be more than enough for what franklin is doing.
 
 ## Electronics
 
