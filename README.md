@@ -14,23 +14,6 @@ Why the name Franklin? I'm not sure. It was funny to me in the moment, and it ki
 
 ### Communication
 
-Franklin uses an ESP32 to an access point that I'll connect to with my laptop. The ESP hosts a websocket server that I'll connect to via rust. 
+The ESP hosts an access point that we connect to via a Rust client. We establish a socket connection and communicate via a low-level TCP interface.
 
-The websockets are fairly minimal; they have a 5-byte header with the following format
-
-`0x46 0x46 <OPERATION> <CONTENT_LEN> 0x00`
-
-`0x46` is an arbitrary number that delineates the beginning of the "packet." Everything is sent via TCP, so these two delineation bytes are a secondary safety measure.
-
-`<OPERATION>` is a single byte, allowing 256 different operations to be sent over the websocket, which is more than enough.
-
-`<CONTENT_LEN>` is two bytes that gets parsed into a u16 value, allowing 8,192 bytes of information, which will be more than enough for what franklin is doing.
-
-## Electronics
-
-Two Nema 17 2A 59Nm steppers drive each of franklin's wheels independently. As of now, these steppers are driven via a DRV8825 controller, which is theoretically capable of 2.2A (with sufficient cooling) before burning up, but 2.0A seems to push its boundaries.
-
-A MPU6050 gyroscope will provide the input to the PID loop, but this is yet to be implemented.
-
-## Final Note
-I'm opening this project publicly even though it definitely isn't my best work. I know this project is going to probably turn out a mess, but it's my first time working on something like this. I hope that people see how I performed in this project and contrast it to how I perform in the future.
+More documentation coming soon.
