@@ -68,38 +68,21 @@ public:
       {
         Serial.println("error: client lost connection");
         return OperationRequest{false, 0, NULL, 0, NULL};
-      if (!client->connected())
-      {
-        Serial.println("error: client lost connection");
-        return OperationRequest{false, 0, NULL, 0, NULL};
       }
 
       if (client->available())
       {
         uint8_t header[5];
         client->readBytes(header, sizeof(header));
-        uint8_t header[5];
-        client->readBytes(header, sizeof(header));
 
         if (!(header[0] == header[1] && header[1] == HEADER_BYTE))
-        if (!(header[0] == header[1] && header[1] == HEADER_BYTE))
         {
-          Serial.println("error: invalid header byte(s): ");
-          Serial.println(header[0]);
-          Serial.println(header[1]);
           Serial.println("error: invalid header byte(s): ");
           Serial.println(header[0]);
           Serial.println(header[1]);
           continue;
         }
 
-        operation = header[2];
-        payload_length = header[3] << 8 | header[4];
-
-        payload = (uint8_t *)malloc(payload_length);
-        client->readBytes(payload, payload_length);
-
-#ifdef DEBUG
         operation = header[2];
         payload_length = header[3] << 8 | header[4];
 
@@ -115,13 +98,8 @@ public:
         }
         debug_println();
 #endif
-#endif
 
         return OperationRequest{true, operation, payload, payload_length, client};
-      }
-      else
-      {
-        delay(1);
       }
       else
       {
@@ -146,7 +124,6 @@ public:
     else
     {
       operation->client->write(operation->payload, operation->payload_length);
-      operation->client->write(operation->payload, operation->payload_length);
     }
     Serial.println("info: echoed payload");
   }
@@ -154,7 +131,6 @@ public:
   void check_incoming_queue()
   {
 
-    MotionInfoQueueItem incoming_item;
     MotionInfoQueueItem incoming_item;
 
     if (xQueueReceive(motion_to_sock_queue, &incoming_item, 0) == pdPASS)
@@ -203,10 +179,6 @@ public:
     };
 
     uint8_t header[] = {70, 70, 0, payload_index, 0};
-    operation->client->write(header, sizeof(header));
-    operation->client->write(payload, payload_index);
-    debug_print("debug: responded to poll request. content length ");
-    debug_println(payload_index);
     operation->client->write(header, sizeof(header));
     operation->client->write(payload, payload_index);
     debug_print("debug: responded to poll request. content length ");

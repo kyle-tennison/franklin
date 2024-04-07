@@ -53,7 +53,7 @@ fn main() {
         franklin.send_update(VariableUpdateTarget::PidProportional, 300);
         franklin.send_update(VariableUpdateTarget::PidIntegral, 48);
         franklin.send_update(VariableUpdateTarget::PidDerivative, 5);
-        franklin.send_update(VariableUpdateTarget::GyroOffset, -20);
+        franklin.send_update(VariableUpdateTarget::GyroOffset, -30);
     }
 
     cli::start_console(esp_container, PYTHON_ADDR)
