@@ -7,26 +7,8 @@ Runs in core zero along with WebsocketServer.
 
 */
 
-#include <Arduino.h>
-#include <shared_variables.h>
+#include "common.h"
 #include <Wire.h>
-
-#define MPU_I2C_ADDR 0x68
-#define I2C_CLOCK_SPEED 400000
-
-#define ROT_VARIANCE_GYRO 4
-#define ROT_VARIANCE_ACCEL 3
-
-#define ALPHA 0.125
-#define GYRO_POLL_DELAY 25
-
-#define KYLE_CONSTANT 0.8
-
-#define PROPORTIONAL_SCALE 200 // ^-1
-#define INTEGRAL_SCALE 50
-#define DERIVATIVE_SCALE -200
-
-#define MAXIMUM_INTEGRAL 100
 
 /// @brief stores the previous state of the MPU
 struct GyroRecord

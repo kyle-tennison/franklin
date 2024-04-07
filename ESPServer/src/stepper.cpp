@@ -1,16 +1,14 @@
 /*
 
 Functions responsible for driving motors. Motion calculations can be found
-in Telemetry.h.
+in motion.cpp.
 
 The stepper_loop is extremely time-sensitive, so any time-intensive functions
 should be executed in core 0, then referenced here via mutex.
 
 */
 
-#include <shared_variables.h>
-#include <constants.h>
-#include <Wire.h>
+#include "common.h"
 
 uint32_t last_loop_micros = 0;
 

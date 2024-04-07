@@ -1,6 +1,12 @@
+/*
+
+Socket connections are handled here. This will dispatch updates to other
+tasks.
+
+*/
+
 #include <WiFi.h>
-#include <constants.h>
-#include <shared_variables.h>
+#include "common.h"
 
 /// @brief handles websocket connections and messages
 class WebsocketServer
@@ -12,7 +18,7 @@ public:
   {
     this->server = s;
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(SSID, PASSWORD);
+    WiFi.softAP(SSID_NAME, PASSWORD);
     IPAddress host_ip = WiFi.softAPIP();
     Serial.print("info: opened access point with ip ");
     Serial.println(host_ip);
