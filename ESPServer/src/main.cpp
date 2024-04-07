@@ -16,8 +16,7 @@ QueueHandle_t motor_update_queue = NULL;
 QueueHandle_t motion_to_sock_queue = NULL;
 
 /// @brief sets up arduino serial & mutexes
-void setup()
-{
+void setup() {
   Serial.begin(115200);
 
   pinMode(AUX_POWER_1, OUTPUT);
@@ -37,40 +36,39 @@ void setup()
   debug_print("debug: instantiated mutexes");
 
   xTaskCreatePinnedToCore(
-      websocket_loop,
-      "Websocket Loop",
-      4096,
-      NULL,
-      10,
-      NULL,
-      0);
+    websocket_loop,
+    "Websocket Loop",
+    4096,
+    NULL,
+    10,
+    NULL,
+    0);
 
   debug_print("debug: spawned websocket loop on core 0");
 
   xTaskCreatePinnedToCore(
-      telemetry_loop,
-      "Telemetry Loop",
-      2048,
-      NULL,
-      5,
-      NULL,
-      0);
+    telemetry_loop,
+    "Telemetry Loop",
+    2048,
+    NULL,
+    5,
+    NULL,
+    0);
   debug_print("debug: spawned telemetry loop on core 0");
 
   xTaskCreatePinnedToCore(
-      stepper_loop,
-      "Stepper Loop",
-      4096,
-      NULL,
-      50,
-      NULL,
-      1);
+    stepper_loop,
+    "Stepper Loop",
+    4096,
+    NULL,
+    50,
+    NULL,
+    1);
 
   debug_print("debug: spawned stepper loop on core 1");
 }
 
-void loop()
-{
+void loop() {
   debug_print("debug: killing default loop");
   vTaskDelete(NULL);
 }
