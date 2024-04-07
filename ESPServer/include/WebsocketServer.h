@@ -136,14 +136,10 @@ public:
     if (xQueueReceive(motion_to_sock_queue, &incoming_item, 0) == pdPASS)
     {
       debug_println("debug: received item from motion -> sock");
-    }
-    else
-    {
-      return;
+      motion_info_cache = incoming_item.motion_info;
+      debug_println("debug: updated motion info cache");
     }
 
-    motion_info_cache = incoming_item.motion_info;
-    debug_println("debug: updated motion info cache");
   }
 
   void status_poll(OperationRequest *operation)
@@ -157,10 +153,10 @@ public:
         pid_state_cache.integral,
         pid_state_cache.derivative,
         ((kinematic_state_cache.motors_enabled) ? (uint8_t)1 : (uint8_t)0),
-        kinematic_state_cache.gyro_offset * 10.0,
-        motion_info_cache.gyro_value * 100.0,
-        motion_info_cache.integral_sum * 10.0,
-        motion_info_cache.motor_target * 100.0,
+        (int16_t)(kinematic_state_cache.gyro_offset * 10.0),
+        (int16_t)(motion_info_cache.gyro_value * 100.0),
+        (int16_t)(motion_info_cache.integral_sum * 10.0),
+        (int16_t)(motion_info_cache.motor_target * 100.0),
     };
 
     uint8_t max_packet_size = 4 * sizeof(variables) / 2;
@@ -191,44 +187,6 @@ public:
     free(payload);
   }
 
-private:
-  WiFiServer *server;
-
-  MotionInfo motion_info_cache;
-  KinematicState kinematic_state_cache;
-  PidState pid_state_cache;
-};
-
-void handle_message(OperationRequest *operation);
-void handle_var_update(OperationRequest *operation);
-bool handle_var_update_inner(uint8_t target, int16_t value);
-void websocket_loop(void *_);
-
-/// @brief relays general message from websocket to serial
-/// @param operation is a pointer to the operation to handle
-void handle_message(OperationRequest *operation)
-{
-  if (operation->operation_code != 0)
-  {
-    Serial.print("error: message must have operation code 0, found ");
-    Serial.println(operation->operation_code);
-    return;
-  }
-  if (operation->payload == NULL)
-  {
-    Serial.println("error: operation payload pointer null; memory error");
-  }
-  else
-  {
-    Serial.print("\ninfo: received incoming message: ");
-    for (uint16_t i = 0; i < operation->payload_length; i++)
-    {
-      Serial.print((char)*(operation->payload + i));
-    }
-    Serial.println();
-    Serial.println();
-  }
-}
 
 /// handles variable updates
 /// @param operation is a pointer to the operation to handle
@@ -266,6 +224,95 @@ void handle_var_update(OperationRequest *operation)
     {
       debug_println("debug: added item to motion queue");
     }
+
+
+    // TODO: this is duplicate code. create a function that takes a reference
+    // to an object for assignment and a reference to the "incoming item"
+    //
+  
+    switch (update.target)
+    {
+    case UpdateTarget::PidProportional:
+        pid_state_cache.proportional = update.value;
+        debug_print("debug: updating PidProportional cache to ");
+        debug_println(update.value);
+        break;
+    case UpdateTarget::PidDerivative:
+        pid_state_cache.derivative = update.value;
+        debug_print("debug: updating PidDerivative cache to ");
+        debug_println(update.value);
+        break;
+    case UpdateTarget::PidIntegral:
+        pid_state_cache.integral = update.value;
+        debug_print("debug: updating PidIntegral cache to ");
+        debug_println(update.value);
+        break;
+    case UpdateTarget::MotorsEnabled:
+        kinematic_state_cache.motors_enabled = update.value == 1;
+        debug_print("debug: updating MotorsEnabled cache to ");
+        debug_println(update.value == 1);
+        break;
+    case UpdateTarget::GyroOffset:
+        debug_print("raw value is:");
+        debug_println(update.value);
+        kinematic_state_cache.gyro_offset = (double)update.value / 10.0;
+        debug_print("debug: updating GyroOffset cache to ");
+        debug_println(kinematic_state_cache.gyro_offset);
+        break;
+    case UpdateTarget::AngularVelocityTarget:
+        kinematic_state_cache.angular_velocity_target = update.value;
+        debug_print("debug: updating AngularVelocityTarget cache to ");
+        debug_println(update.value);
+        break;
+    case UpdateTarget::LinearVelocityTarget:
+        kinematic_state_cache.linear_velocity_target = update.value;
+        debug_print("debug: updating LinearVelocityTarget cache to ");
+        debug_println(update.value);
+        break;
+    default:
+        Serial.print("error: unable to deserialize ConfigQueueItem with target ");
+        Serial.print(update.target);
+        Serial.println(" in websocket loop");
+        return;
+    }
+
+  }
+}
+
+private:
+  WiFiServer *server;
+
+  MotionInfo motion_info_cache;
+  KinematicState kinematic_state_cache;
+  PidState pid_state_cache;
+};
+
+void handle_message(OperationRequest *operation);
+void websocket_loop(void *_);
+
+/// @brief relays general message from websocket to serial
+/// @param operation is a pointer to the operation to handle
+void handle_message(OperationRequest *operation)
+{
+  if (operation->operation_code != 0)
+  {
+    Serial.print("error: message must have operation code 0, found ");
+    Serial.println(operation->operation_code);
+    return;
+  }
+  if (operation->payload == NULL)
+  {
+    Serial.println("error: operation payload pointer null; memory error");
+  }
+  else
+  {
+    Serial.print("\ninfo: received incoming message: ");
+    for (uint16_t i = 0; i < operation->payload_length; i++)
+    {
+      Serial.print((char)*(operation->payload + i));
+    }
+    Serial.println();
+    Serial.println();
   }
 }
 
@@ -311,7 +358,7 @@ void websocket_loop(void *_)
       break;
     case 1:
       debug_println("debug: dispatching to variable update");
-      handle_var_update(&request);
+      sock.handle_var_update(&request);
       break;
     case 2:
       debug_println("debug: dispatching to echo");

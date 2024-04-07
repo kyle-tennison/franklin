@@ -113,7 +113,7 @@ fn handle_gyro(command: Vec<&str>, esp_container: &mut Option<FranklinClient>) {
                 }
             };
 
-            let value = (value_float.round() * 10.) as i16;
+            let value = (value_float * 10.) as i16;
 
             esp.send_update(VariableUpdateTarget::GyroOffset, value)
         }

@@ -248,9 +248,9 @@ void check_incoming_queue()
         debug_println(incoming_item.value == 1);
         break;
     case UpdateTarget::GyroOffset:
-        kinematic_state.gyro_offset = incoming_item.value;
+        kinematic_state.gyro_offset = (double)incoming_item.value / 10.0;
         debug_print("debug: updating GyroOffset to ");
-        debug_println(incoming_item.value);
+        debug_println(kinematic_state.gyro_offset);
         break;
     case UpdateTarget::AngularVelocityTarget:
         kinematic_state.angular_velocity_target = incoming_item.value;
