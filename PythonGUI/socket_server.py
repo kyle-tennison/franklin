@@ -105,11 +105,14 @@ class Server:
             )
 
         elif operation_request.code == 1:
+            pass
+
+        elif operation_request.code == 2:
             self.con.close()
             self.has_alive_connection = False
             print("closed connection")
 
-        elif operation_request.code == 2:
+        elif operation_request.code == 3:
             print("incoming json")
             incoming = StatusResponse(
                 **json.loads(operation_request.content.decode("utf-8"))
@@ -159,7 +162,7 @@ class Server:
                     continue
                 result = self.dispatch_operation(operation)
 
-                if operation.code == 2 and isinstance(result, StatusResponse):
+                if operation.code == 3 and isinstance(result, StatusResponse):
                     return result
 
             print("warning: client disconnected, attempting to reconnect")

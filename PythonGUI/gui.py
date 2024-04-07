@@ -110,8 +110,8 @@ class Graph:
 
         # load arrays with points
         interval_size = 50 if len(self.points) >= 50 else len(self.points)
-        xs = np.empty((1,interval_size), dtype=float)
-        ys = np.empty((1,interval_size), dtype=float)
+        xs = np.empty((interval_size), dtype=float)
+        ys = np.empty((interval_size), dtype=float)
         for i, point in enumerate(self.points[-interval_size:]):
             x, y = point
             xs[i] = x
@@ -123,8 +123,9 @@ class Graph:
         self.ax.set_title(self.name)
 
         # only draw after >= 50 points are accumulated
-        x_new = np.linspace(min(xs), max(xs), 300)
-        spl = make_interp_spline(xs, ys, k=3)
-        y_smooth = spl(x_new)
+        if interval_size >= 50:
+            x_new = np.linspace(min(xs), max(xs), 300)
+            spl = make_interp_spline(xs, ys, k=3)
+            y_smooth = spl(x_new)
 
-        self.ax.plot(x_new, y_smooth, label="Smoothed curve")
+            self.ax.plot(x_new, y_smooth, label="Smoothed curve")

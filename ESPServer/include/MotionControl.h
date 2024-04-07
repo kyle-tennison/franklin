@@ -272,6 +272,7 @@ void check_incoming_queue()
 
 /// @brief interprets sensor inputs and pre-processes for MotorDrive.h
 /// @param _ unused
+u16_t num_push_error = 0;
 void telemetry_loop(void *_)
 {
 
@@ -314,7 +315,14 @@ void telemetry_loop(void *_)
 
         if (xQueueSend(motor_update_queue, &motor_update, 0) != pdPASS)
         {
-            debug_println("warning: failed to push update to motor_update_queue");
+            num_push_error ++;
+        }
+        else {
+            num_push_error = 0;
+        }
+
+        if (num_push_error > 10){
+            debug_println("warning: motor_update_queue full");
         }
 
         MotionInfo motion_info;

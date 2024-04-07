@@ -38,11 +38,10 @@ void update_motor_targets()
 
     if (xQueueReceive(motor_update_queue, &new_target, 0) == pdPASS)
     {
-        // debug_println("debug: updating motor target in stepper loop")
+        current_wait_1 = angular_vel_to_step_delay(new_target.motor_target.mot_1_omega);
+        current_wait_2 = angular_vel_to_step_delay(new_target.motor_target.mot_2_omega);
     }
 
-    current_wait_1 = angular_vel_to_step_delay(new_target.motor_target.mot_1_omega);
-    current_wait_2 = angular_vel_to_step_delay(new_target.motor_target.mot_2_omega);
 }
 
 /// @brief a real-time loop that sends steps to the motor. Runs on core 1
