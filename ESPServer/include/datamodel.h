@@ -1,3 +1,5 @@
+#include <Arduino.h>
+#include "Wifi.h"
 
 enum UpdateTarget
 {
