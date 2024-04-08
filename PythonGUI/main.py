@@ -15,7 +15,7 @@ window.add_graph(
         name="Gyroscope",
         placement=(1, 3, 1),
         poller=lambda: window.status.status.gyro_value,
-        limits=(-45, 45),
+        limits=(-370, 370),
     )
 )
 window.add_graph(
