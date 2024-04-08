@@ -31,7 +31,7 @@ void setup() {
 
   sock_to_motion_queue = xQueueCreate(10, sizeof(ConfigQueueItem));
   motor_update_queue = xQueueCreate(10, sizeof(MotorQueueItem));
-  motion_to_sock_queue = xQueueCreate(2, sizeof(MotionInfoQueueItem));
+  motion_to_sock_queue = xQueueCreate(1, sizeof(MotionInfoQueueItem));
 
   debug_print("debug: instantiated mutexes");
 
